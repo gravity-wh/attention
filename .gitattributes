@@ -1,0 +1,36 @@
+# =====================================================================
+#  .gitattributes —— 换行符与二进制标记
+#  为什么必须要有这一份：本仓库要在 Windows 上编辑、在 Linux 服务器上跑。
+#  如果 *.sh / Makefile 被提交成 CRLF，Linux 上会报
+#  "bad interpreter: /bin/bash^M"，而且极难排查。
+# =====================================================================
+
+* text=auto eol=lf
+
+# 脚本与构建文件强制 LF
+*.sh      text eol=lf
+*.mk      text eol=lf
+Makefile  text eol=lf
+*.f       text eol=lf
+*.sv      text eol=lf
+*.svh     text eol=lf
+*.v       text eol=lf
+*.sdc     text eol=lf
+*.py      text eol=lf
+
+# 文档允许 CRLF（Word/Notepad 友好）
+*.md      text eol=crlf
+*.txt     text eol=crlf
+
+# 二进制：不要做任何换行符转换，也不要尝试 diff
+*.pdf     binary
+*.png     binary
+*.jpg     binary
+*.svg     text eol=lf
+*.zip     binary
+*.gds     binary
+*.db      binary
+
+# 测试向量的十六进制文件不要被改成文本处理
+*.hex     text eol=lf
+*.mem     text eol=lf

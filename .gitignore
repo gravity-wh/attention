@@ -70,3 +70,6 @@ desktop.ini
 .idea/
 
 # ---- 大文件红线：单文件 > 20MB 一律不进库（用 Git LFS 或外链）----
+
+# ---- Agent 内部状态（不是项目内容）----
+.workbuddy/
