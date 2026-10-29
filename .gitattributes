@@ -34,3 +34,6 @@ Makefile  text eol=lf
 # 测试向量的十六进制文件不要被改成文本处理
 *.hex     text eol=lf
 *.mem     text eol=lf
+
+# 向量清单由 Linux 侧脚本追加写入，固定 LF 免得混行尾
+hw/tb/vectors/**/manifest.txt  text eol=lf
