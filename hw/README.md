@@ -222,6 +222,12 @@ make vec SEED=20260101 MODE=smoke VARIANT=varA
 make vec SEED=20260101 MODE=full  VARIANT=varA   # 出报告数据前
 make vecfsck SEED=20260101                      # 只回读校验，不重写（改了模型没重生成会在这里暴露）
 
+# 2.5 单元级穷举对拍（改了 rtl/core/ 里任一模块后必做）
+#     系统级六类激励只跑 12 个任务，碰不到 exp/倒数/量化的角；
+#     这四个 tb 是穷举的，能把那些角一个个揪出来。
+make unit    VARIANT=ref                  # ref 的数值格式（16bit/qf13）
+make unitall                              # 三个格式各跑一遍，验参数化没写死
+
 # 3. 单类激励调试（快，出问题先看这个）
 make sim VARIANT=ref CAT=random N=2 VERBOSE=1
 
