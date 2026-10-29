@@ -17,8 +17,11 @@
 | `tb/sys/` | 顶层自检测试平台（驱动统一接口 + scoreboard） | 单元测试 |
 | `tb/vectors/` | 固定 seed 生成的输入向量 + `meta.txt`（**进版本库**） | 波形 |
 | `tb/cov/` | 覆盖点定义、覆盖率合并脚本 | 覆盖率数据库产物 |
-| `flow/` | 仿真/综合/功耗/汇总脚本 | 手敲命令的临时脚本 |
-| `config/variants.mk` | 方案注册表（唯一真源） | 别处再写一份方案清单 |
+| `flow/` | 仿真/综合/汇总脚本 | 手敲命令的临时脚本 |
+| `flow/synth/` | Genus 综合：`syn.tcl` + `run_syn.sh`（预检/SDC/解析/面积体检）+ `parse_syn.py` | 直接手敲 genus |
+| `flow/collect/` | `collect.py`（runs/ → `results/metrics.csv`）、`make_table.py`（→ 报告表 2/表 3） | 人眼抄 `runs/` 里的数字 |
+| `config/variants.mk` | 方案注册表 + 每方案数值格式 QB/QF/LUT（唯一真源） | 别处再写一份方案清单 |
+| `config/pdk.mk` | 工艺库/角/PVT/驱动单元/负载/活动率（综合的唯一真源） | 在 syn 脚本里写死库路径 |
 | `runs/` | 每次运行的产物（**不进版本库**） | 源码 |
 | `results/` | 从 runs 提取出的指标 csv/md（**进版本库**） | 原始日志 |
 
@@ -111,14 +114,26 @@ module top_varB `ATTN_TOP_PORTS;
 | 文件 | 内容 |
 |---|---|
 | `<cat>_<idx>_qkv.hex` | 768 个 16 bit：`Q[0..255] K[256..511] V[512..767]`，行主序 |
-| `<cat>_<idx>_exp.hex` | 256 个 16 bit：**逐位一致**的期望输出（FP16 位模式） |
+| `<cat>_<idx>_exp_<cfg>.hex` | 256 个 16 bit：**逐位一致**的期望输出（FP16 位模式） |
 | `<cat>_<idx>_ref.hex` | 256 个 64 bit：float64 参考值，tb 用 `$bitstoreal` 还原后算 RMSE |
 
-还有 `manifest.txt` 记 seed、定点配置（qb/qf/lut）、任务清单、以及每行的 Σp 偏差。
+`<cfg>` = `qb<QB>qf<QF>`（如 `qb10qf7`）。**`exp` 必须带格式标签**：它是"该格式下
+应得的结果"，ref(16 bit) 与 varA(10 bit) 的黄金值本来就不同；不带标签的话，后跑的
+方案会静默覆盖前一个，tb 会拿 varA 的输出去比 ref 的期望，报一堆看着像 RTL bug 的失配。
+`qkv` / `ref` 只取决于输入，与格式无关，三个方案共享同一份。
+
+清单同样按格式分文件：`manifest_<cfg>.txt` 记 seed、定点配置、任务清单、每行的 Σp 偏差；
+`geninfo_<cfg>.txt` 记生成环境（时间、主机、编译器）。两者分开是为了让主清单**只含
+确定性内容** —— 同一 seed 重跑在 git 里是零 diff，而"谁在哪台机器上生成的"也查得到。
+
 `cat` 取 `random / zero / extreme / cancel / reset / cont` 六个短名。
 
-两档规模：`MODE=smoke` 每类 2 个任务（37 个文件、约 110 KB，**进版本库**）；
-`MODE=full` 共 616 个任务（1849 个文件、9.8 MB，按需生成、不进库，但 seed 进库）。
+**复现的硬要求**：`dumpvec` 用 `"wb"` 写文件、`attn_ref` 不调用 libm 的 `exp()`。
+这两条守的是"同一 seed 必然产出同一串字节"，跨 Windows/Linux、跨 gcc 版本都成立
+（实测 gcc 4.8.5/Linux 与 gcc 15.2/Windows 生成的 37 个文件逐字节相同）。
+
+两档规模：`MODE=smoke` 每类 2 个任务、每个格式 37 个文件（约 110 KB，**进版本库**）；
+`MODE=full` 共 616 个任务（每格式 1849 个文件、9.8 MB，按需生成、不进库，但 seed 进库）。
 
 ### 一份 tb，三个 DUT
 
@@ -195,12 +210,17 @@ cd /root/work/hw
 # 0. 确认流程本身是好的（第一次跑、或改了 tb 之后必做）
 make flowtest
 
-# 1. 确认工作区干净 —— 脏工作区跑出来的结果绑不到 commit，等于白跑
-git status --porcelain
+# 1. 提交前自检 —— 别用 git status 判断"有没有改东西"
+#    本仓库在 SMB 共享盘上，git status 会把没改过的 *.hex 报成 M（索引 stat
+#    缓存刷不掉）。真实变更只认 git diff --name-only HEAD。
+make preflight
 
-# 2. 生成/确认向量（首次或换 seed 时）
-make vec SEED=20260101 MODE=smoke     # 日常
-make vec SEED=20260101 MODE=full      # 出报告数据前
+# 2. 生成/确认向量（首次、换 seed、或改了数值格式时）
+#    每个数值格式生成一次：ref 是 16/13，varA/varB 是 10/7，两者不能共用 exp
+make vec SEED=20260101 MODE=smoke VARIANT=ref    # 日常
+make vec SEED=20260101 MODE=smoke VARIANT=varA
+make vec SEED=20260101 MODE=full  VARIANT=varA   # 出报告数据前
+make vecfsck SEED=20260101                      # 只回读校验，不重写（改了模型没重生成会在这里暴露）
 
 # 3. 单类激励调试（快，出问题先看这个）
 make sim VARIANT=ref CAT=random N=2 VERBOSE=1
@@ -209,15 +229,18 @@ make sim VARIANT=ref CAT=random N=2 VERBOSE=1
 make regress VARIANT=ref TAG=ref-smoke MODE=smoke
 make regress VARIANT=ref TAG=ref-full  MODE=full
 
-# 5. 综合 + 功耗（同一个 TAG，才能和仿真结果配对）
-make syn   VARIANT=ref TAG=ref-full
-make power VARIANT=ref TAG=ref-full
+# 5. 综合（面积/时序/功耗出自同一次映射，所以只需一条命令）
+#    TAG 必须与第 4 步一致，否则面积与仿真数据配不上对
+make syn VARIANT=ref TAG=ref-full
+make power VARIANT=ref TAG=ref-full     # 只是查看已跑综合的功耗与假设，不重跑
 
-# 6. 提取指标
-make collect
+# 6. 提取指标 → 报告表
+make collect      # runs/ -> results/metrics.csv
+make table        # metrics.csv -> results/tables.md（表 2 / 表 3）
 
 # 7. 在 results/EXPERIMENTS.md 记一行：commit ↔ 变量 ↔ 指标
-git add -A && git commit -m "ref: 基准 -> RMSE=xx, A=xx um2, D=xx us, E=xx nJ"
+git diff --name-only HEAD          # 先看真实改了什么
+git add -p && git commit -m "exp(syn): ref 基准 -> A=xx um2, D=xx us, E=xx nJ, RMSE=xx"
 ```
 
 每次 `make sim/regress` 都会写：

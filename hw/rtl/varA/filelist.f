@@ -10,17 +10,22 @@
 //    那说明这个改动要么应做成参数，要么就是你把对比条件破坏了。
 // =====================================================================
 +incdir+rtl/common
++incdir+rtl/core
 
 // ---- 1. 公共层：三方案共用（必须与 ref、varB 逐行一致）----
 rtl/common/attn_pkg.sv
 rtl/common/attn_ports.svh
+// ⚠ attn_math.svh 必须以**设计文件**形式列在这里，不能只靠模块里的 `include：
+//   VCS 把同一批文件当作一个编译单元，头文件守卫（`ifndef ATTN_MATH_SVH）
+//   会跨文件生效 —— 谁先 include 谁独占（且是模块内局部），后面所有文件的
+//   include 全部被跳过，报 "Identifier not declared"。ref 已经踩过一次。
+rtl/core/attn_math.svh
 
-// ---- 2. 共享数据通路 ----
-// rtl/core/fp16_mul.sv
-// rtl/core/fp16_add.sv
-// rtl/core/exp_lut.sv
-// rtl/core/mac_lane.sv
-// rtl/core/sram_wrap.sv
+// ---- 2. 共享数据通路（ref 已实现，varA 直接复用）----
+rtl/core/fp16_quant.sv
+rtl/core/exp2_unit.sv
+rtl/core/fix2fp16.sv
+rtl/core/recip_unit.sv
 
 // ---- 3. 本方案独有 ----
 // rtl/varA/top_varA.sv
