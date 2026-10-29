@@ -16,7 +16,10 @@
 //    只过 (1) 说明 RTL 忠实于一个错误的模型；只过 (2) 说明模型和 RTL 不是一回事。
 //
 //  ── plusargs ─────────────────────────────────────────────────────────
-//    +VECDIR=<dir>   向量目录（含 <cat>_<idx>_qkv/exp/ref.hex）
+//    +VECDIR=<dir>   向量目录（含 <cat>_<idx>_qkv/exp_<cfg>/ref.hex）
+//    +CFG=<tag>      数值格式标签，如 qb10qf7 —— 决定读哪个 exp 文件。
+//                    **不给默认值**：读错格式的黄金值会表现为"RTL 全错"，
+//                    这种假故障比真 bug 更难查。缺了就直接退出。
 //    +CAT=<name>     类别：random zero extreme cancel reset cont
 //    +N=<n>          任务数
 //    +VERBOSE=1      打印每个任务的明细与失配元素
@@ -142,6 +145,19 @@ module tb_attn;
 
   cg_task cg = new();
 
+  // ---------------------------------------------------------------- 主流程变量
+  // 必须声明在 task 之前：load_vec() 要用 cfgtag 拼黄金值文件名，
+  // 而 VCS 对「task 里引用后面才声明的变量」直接报 Identifier not declared。
+  string vecdir;
+  string cfgtag;
+  int    ntasks;
+  bit    verbose;
+  int    lat, ord, recv, mismatch, nf, rdiff;
+  bit    passv;
+  real   rmse, maxae;
+  string base;
+  int    cand;
+
   // ---------------------------------------------------------------- 工具
   task automatic do_reset(input int cycles);
     rst_n = 1'b0;
@@ -181,9 +197,10 @@ module tb_attn;
     end
     $readmemh(fn, qkv);
 
-    fn = {base, "_exp.hex"};
+    fn = {base, "_exp_", cfgtag, ".hex"};
     if (!file_exists(fn)) begin
       $display("[FATAL] 向量缺失: %0s", fn);
+      $display("        → 该格式的黄金值没生成。make vec VARIANT=<方案> SEED=<seed>");
       $finish;
     end
     $readmemh(fn, expv);
@@ -286,17 +303,14 @@ module tb_attn;
   endtask
 
   // ---------------------------------------------------------------- 主流程
-  string vecdir;
-  int    ntasks;
-  bit    verbose;
-  int    lat, ord, recv, mismatch, nf, rdiff;
-  bit    passv;
-  real   rmse, maxae;
-  string base;
-  int    cand;
-
   initial begin
     if (!$value$plusargs("VECDIR=%s", vecdir)) vecdir = "tb/vectors/s20260101";
+    if (!$value$plusargs("CFG=%s", cfgtag)) begin
+      $display("[FATAL] 缺少 +CFG=<cfg>：不知道 DUT 是哪个数值格式，就无法挑黄金值");
+      $display("        → make sim 会自动传（值来自 config/variants.mk）；");
+      $display("          手工跑 simv 时必须自己给，例如 +CFG=qb10qf7");
+      $finish;
+    end
     if (!$value$plusargs("CAT=%s", cat_name))  cat_name = "random";
     if (!$value$plusargs("N=%d", ntasks))      ntasks = 2;
     if (!$value$plusargs("VERBOSE=%d", verbose)) verbose = 0;
@@ -317,7 +331,7 @@ module tb_attn;
     $display(" tb_attn —— DUT=%0s  cat=%0s  n=%0d  clk=%0d MHz",
              `DUT_NAME, cat_name, ntasks, CLK_MHZ);
     $display(" 判据：逐位一致 + RMSE<=%0.3f + max|e|<=%0.3f", RMSE_LIMIT, MAXAE_LIMIT);
-    $display(" 向量：%0s", vecdir);
+    $display(" 向量：%0s   格式：%0s", vecdir, cfgtag);
     $display("================================================================");
 
     do_reset(5);

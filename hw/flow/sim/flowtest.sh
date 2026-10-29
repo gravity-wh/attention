@@ -32,6 +32,9 @@ vcs -full64 -sverilog -timescale=1ns/1ps \
     -pvalue+tb_attn.CLK_MHZ=100 \
     +define+DUT=top_stub \
     "+define+DUT_NAME=\"top_stub\"" \
+    +define+ATTN_QB="${QB:-16}" \
+    +define+ATTN_QF="${QF:-13}" \
+    +define+ATTN_LUT="${LUT:-4}" \
     +incdir+rtl/common \
     rtl/common/attn_pkg.sv \
     tb/common/attn_tb_pkg.sv \
@@ -49,7 +52,7 @@ echo
 echo "================================================================"
 echo " A. 判据自检（预期 PASS）"
 echo "================================================================"
-"$RUN/simv" +VECDIR="$OUT" +CAT=random +N=1 +SELFTEST=1 -l "$RUN/selftest.log" > /dev/null 2>&1
+"$RUN/simv" +VECDIR="$OUT" +CFG="${CFGTAG:-qb16qf13}" +CAT=random +N=1 +SELFTEST=1 -l "$RUN/selftest.log" > /dev/null 2>&1
 grep -E "^\[SELFTEST\]" "$RUN/selftest.log" || tail -5 "$RUN/selftest.log"
 # 判 PASS/FAIL 一律解析日志，不看 simv 退出码：
 # VCS 的 $finish 永远返回 0，$fatal 又会卡约 90 秒才退出，退出码不可依赖。
@@ -63,7 +66,7 @@ echo
 echo "================================================================"
 echo " B. 夹具自检（stub 输出全 0，预期 FAIL 且退出码 1）"
 echo "================================================================"
-"$RUN/simv" +VECDIR="$OUT" +CAT=random +N=1 -l "$RUN/stub.log" > /dev/null 2>&1
+"$RUN/simv" +VECDIR="$OUT" +CFG="${CFGTAG:-qb16qf13}" +CAT=random +N=1 -l "$RUN/stub.log" > /dev/null 2>&1
 grep -m2 -E "^\[task|结果：" "$RUN/stub.log" || true
 
 # 判据以 [SUMMARY] 的 status 字段为准，不以 simv 的退出码为准：

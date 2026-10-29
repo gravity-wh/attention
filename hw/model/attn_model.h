@@ -74,7 +74,13 @@ void attn_reset(void);
 
 void attn_fixed(const attn_cfg_t *cfg, const mat_in_t *in, mat_out_t *out);
 
-/* float64 参考（评分用）：输入取 FP16 精确值，全程 double */
+/* float64 参考（评分用）：输入取 FP16 精确值，全程 double。
+ * 输出必须跨机器逐位可复现 —— 内部 exp 用 attn_exp_f64()，不调 libm。 */
 void attn_ref(const mat_in_t *in, double y[ATTN_MX][ATTN_MX]);
+
+/* 确定性 exp(x)：只用 IEEE-754 基本四则 + ldexp，不依赖任何 libm 实现。
+ * 与 glibc 的 exp() 最大偏差 1 ulp；同样输入在任何平台都得到同一串位。
+ * 用途：让 ref.hex 在 Windows / Linux / 不同 gcc 之间字节一致。 */
+double attn_exp_f64(double x);
 
 #endif /* ATTN_MODEL_H */

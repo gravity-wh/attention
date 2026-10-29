@@ -51,7 +51,28 @@ package attn_pkg;
   localparam int RECIP_SH     = 40;      // 倒数分子 2^40
   localparam int LOG2E_Q16  = 94548;     // round(log2(e) * 2^16)
   localparam int EXP_ZERO_N = 16;        // 2^-n，n >= 16 直接置 0
-  localparam int EXP_LUT_BITS = 4;       // exp2 LUT 索引位（16 段 + 1 端点）
+
+  // ---- Q/K/V 的定点格式：编译期注入，与 config/variants.mk 同源 ----
+  //  ref 用 16bit（贴近 FP16 语义，充当基线），varA/varB 用 10bit（width_sweep
+  //  选出的工作点）。同一个包要服务三种格式，所以只能是宏而不是 localparam。
+  //  build.sh 传 +define+ATTN_QB/ATTN_QF/ATTN_LUT，值取自 variants.mk 的
+  //  qb_<variant>/qf_<variant>/lut_<variant>。下面的默认值只为单独 lint 一个
+  //  文件时能编译，正式仿真与综合一律被显式覆盖。
+  //
+  //  这三项与 vectors 的 _exp_qb<QB>qf<QF>.hex 标签必须一致：不一致的表现是
+  //  "tb 报每个元素都错"，看起来像 RTL 全是 bug，实际是读错了黄金值。
+`ifndef ATTN_QB
+  `define ATTN_QB 16
+`endif
+`ifndef ATTN_QF
+  `define ATTN_QF 13
+`endif
+`ifndef ATTN_LUT
+  `define ATTN_LUT 4
+`endif
+  localparam int Q_BITS       = `ATTN_QB;
+  localparam int Q_FRAC       = `ATTN_QF;
+  localparam int EXP_LUT_BITS = `ATTN_LUT;   // exp2 LUT 索引位（4 -> 16 段 + 1 端点）
 
   // ---- FP16 常量 ----
   localparam fp16_t FP16_ZERO = 16'h0000;

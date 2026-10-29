@@ -14,7 +14,11 @@ ifeq ($(origin CC),default)
 CC := gcc
 endif
 
-CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter
+# -ffp-contract=off 是复现性的前提，不是为了性能：
+#   gcc 默认允许把 a*b+c 收缩成 FMA，收缩与否改变 double 的最后一位，
+#   于是同一份源码在不同编译器/不同 -O 级别下算出不同的 float64 参考值，
+#   ref.hex 就会出现无意义的 diff。定点和 FP16 路径不受影响，但参考值必须钉死。
+CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -ffp-contract=off -fno-fast-math
 LDLIBS  ?= -lm
 SEED    ?= 20260101
 

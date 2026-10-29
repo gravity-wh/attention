@@ -112,6 +112,34 @@ static void test_exp2(void)
     printf("  info  exp2 插值最大相对误差 = %.3e\n", worst);
 }
 
+/* 确定性 exp：与 libm 的偏差必须 <= 1 ulp。
+ * 这条不是为了"更准"，是防回归 —— 系数抄错、或编译器又开始把
+ * Horner 收缩成 FMA，都会让 ref.hex 悄悄变一位。等发现 git diff
+ * 才发现"向量变了"就太晚了：那时已经分不清是模型错了还是编译器变了。
+ * 扫描范围覆盖 F=16 的全部格点（RTL 实际会遇到的 x 都在这个网格上）。 */
+static void test_expf(void)
+{
+    union { double d; unsigned long long u; } a, b;
+    long  maxulp = 0;
+    int   nbad   = 0;
+
+    for (int i = 0; i <= 32 * 65536; i++) {
+        double x  = -(double)i / 65536.0;
+        double rl = exp(x);              /* libm */
+        double rd = attn_exp_f64(x);     /* 确定性实现 */
+        long   u;
+
+        a.d = rl; b.d = rd;
+        u = (a.u > b.u) ? (long)(a.u - b.u) : (long)(b.u - a.u);
+        if (u > maxulp) maxulp = u;
+        if (u > 1) nbad++;
+    }
+    chk_i("exp: F=16 格点上 >1ulp 的点数", nbad, 0);
+    chk("exp: 最大偏差 ulp", (double)maxulp, 0.0, 1.0);   /* 值本身 <= 1 */
+    chk("exp(0) == 1", attn_exp_f64(0.0), 1.0, 0.0);
+    chk("exp(-32) 相对误差", attn_exp_f64(-32.0) / exp(-32.0) - 1.0, 0.0, 1e-15);
+}
+
 static void test_endpoints(void)
 {
     /* 全部输入为同一常数 c：S 全为 16c²/4=4c²，softmax 均匀，Y 每行 = 均值(V) */
@@ -154,6 +182,7 @@ int main(void)
     printf("== fp16 ==\n");    test_fp16();
     printf("== fixed ==\n");   test_fx();
     printf("== exp2  ==\n");   test_exp2();
+    printf("== expf  ==\n");   test_expf();
     printf("== 端点  ==\n");   test_endpoints();
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);

@@ -35,3 +35,28 @@ desc_varB := 方案B：脉动阵列 + 在线 Softmax
 
 # ---- PVT 角：三者必须完全一致，否则对比不成立 ------------------------
 PVT ?= tt_25C_0.90V
+
+# ---- 内部数值格式：Q/K/V 定点位宽 —— 全工程唯一真源 -------------------
+#   qb_<variant> 有符号总位宽，qf_<variant> 小数位（范围 ±2^(qb-qf-1) = ±4）
+#   lut_<variant> exp2 的 LUT 索引位（4 -> 16 段 + 1 端点）
+#
+#   为什么不是三套都一样：
+#     ref 是「统一参考实现」，要贴近题面的 FP16 语义，所以给足 16 bit，
+#     它在效率对比里充当"没做量化优化"的那个基线。
+#     varA/varB 才承载自主设计（量化 + 结构），用 width_sweep 选出的工作点
+#     10 bit（docs/theory/01-数值格式设计.md §4：RMSE 余量 15×）。
+#     这不是"同条件对照"破例：varA vs varB 格式完全一致，隔离的是结构；
+#     ref vs varA 的差值是"不做优化 vs 做优化"的总账，40 分要报的正是这笔账。
+#
+#   改这三行必须重跑 make vec（每个方案一次），否则向量与 RTL 对不上。
+qb_ref  := 16
+qf_ref  := 13
+lut_ref := 4
+
+qb_varA  := 10
+qf_varA  := 7
+lut_varA := 4
+
+qb_varB  := 10
+qf_varB  := 7
+lut_varB := 4

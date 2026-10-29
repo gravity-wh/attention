@@ -35,9 +35,17 @@ TOP     := $(top_$(VARIANT))
 CLOCK   := $(clock_$(VARIANT))
 VECDIR  := tb/vectors/s$(SEED)
 
-export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT MODE CAT N VERBOSE
+# 数值格式：从 config/variants.mk 按方案取，绝不在脚本里另写一份默认值。
+# CFGTAG 同时决定三处：C 模型导出哪个黄金值、RTL 编译时的 Q_BITS/Q_FRAC、
+# tb 读哪个 exp 文件。三者同源，才不会出现"向量按 16bit 生成、RTL 按 10bit 综合"。
+QB      := $(qb_$(VARIANT))
+QF      := $(qf_$(VARIANT))
+LUT     := $(lut_$(VARIANT))
+CFGTAG  := qb$(QB)qf$(QF)
 
-.PHONY: all help check model modeltest err vec sim regress flowtest lint syn power collect table manifest clean
+export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT MODE CAT N VERBOSE QB QF LUT CFGTAG
+
+.PHONY: all help check model modeltest err vec vecfsck vecfsck1 sim regress flowtest lint syn power collect table manifest clean
 
 # 说明：这里刻意不用 shell 循环做变量间接引用——
 #       某些 Windows 环境下长命令行里的非 ASCII 会被截断，导致引号失配。
@@ -48,7 +56,8 @@ help:
 	@echo "  make model                           编译数值模型（无 EDA 依赖）"
 	@echo "  make modeltest                       模型单元自检（fp16/定点/exp2/端点）"
 	@echo "  make err     SEED=...                误差基线 → results/error_baseline.txt"
-	@echo "  make vec     SEED=... MODE=smoke|full  黄金模型导出 RTL 向量"
+	@echo "  make vec     SEED=... MODE=smoke|full VARIANT=<v>  黄金模型导出 RTL 向量"
+	@echo "  make vecfsck  SEED=...               回读校验：向量是否仍与模型一致"
 	@echo "  make flowtest                        自检流程本身（不需要 RTL）"
 	@echo "  make sim     VARIANT=<v> CAT=<c>      编一个方案 + 跑一类激励"
 	@echo "  make regress VARIANT=<v> MODE=full    一个方案跑完六类（回归）"
@@ -64,7 +73,7 @@ help:
 	@echo "  varA   $(top_varA)    $(strip $(clock_varA)) MHz   $(desc_varA)"
 	@echo "  varB   $(top_varB)    $(strip $(clock_varB)) MHz   $(desc_varB)"
 	@echo "-- 变量 ------------------------------------------------------"
-	@echo "  VARIANT=$(VARIANT)  TAG=$(TAG)  SEED=$(SEED)  CLOCK=$(CLOCK)  PVT=$(PVT)"
+	@echo "  VARIANT=$(VARIANT)  TAG=$(TAG)  SEED=$(SEED)  CLOCK=$(CLOCK)  CFG=$(CFGTAG)  PVT=$(PVT)"
 
 check:
 	@test -f $(FLIST) || { echo "✗ 缺少 filelist: $(FLIST)"; exit 1; }
@@ -85,8 +94,21 @@ err: model
 # ---------------- 1. 测试向量（黄金模型直接导出，种子必须记录）----------------
 # 铁律：向量只能由 model/ 里的 C 模型产出。任何"另写一份生成器"的做法，
 #       都会让"逐位一致"这件事变成两份代码互相对答案，验证就失去意义。
+#
+# 每个方案按自己的数值格式导出：qkv/ref 与格式无关（只与 seed 有关，共享），
+# 黄金输出 exp 带格式标签，所以 ref(16bit) 与 varA(10bit) 不会互相覆盖。
 vec:
 	bash flow/sim/genvec.sh $(SEED) $(MODE)
+
+# 回读校验：不重新生成，只把磁盘上的向量读回来与模型重算的结果逐值比对。
+# 专抓两类事故：改了模型忘了 make vec（向量过期）、文件被截断/手工改过。
+vecfsck:
+	@for v in $(VARIANTS); do \
+	  $(MAKE) --no-print-directory vecfsck1 VARIANT=$$v || exit 1; \
+	done
+
+vecfsck1:
+	bash flow/sim/genvec.sh $(SEED) $(MODE) check
 
 # 流程自检：不需要任何 RTL，验证 tb / 驱动 / 判据 / 退出码这条链路
 flowtest:

@@ -39,10 +39,16 @@ CM_OPTS=$(cat "$RUN/cm_opts.txt" 2>/dev/null || echo "")
 CM_RUN=""
 [ -n "$CM_OPTS" ] && CM_RUN="$CM_OPTS -cm_name ${VARIANT}_${TAG}_${CAT}"
 
-echo "[run] $VARIANT/$CAT  n=$N  seed=$SEED  vec=$VECDIR"
+# 数值格式标签由 make 从 config/variants.mk 传来，决定读哪个 _exp_<cfg>.hex。
+# 这里不设默认值：默认值一旦和 RTL 的实际格式不一致，tb 会报"逐位全错"，
+# 而这种假故障排查起来比真 bug 贵得多。
+: "${CFGTAG:?未设置 CFGTAG —— 请用 make sim/regress 调用}"
+
+echo "[run] $VARIANT/$CAT  n=$N  seed=$SEED  vec=$VECDIR  cfg=$CFGTAG"
 
 "$SIMV" \
     +VECDIR="$VECDIR" \
+    +CFG="$CFGTAG" \
     +CAT="$CAT" \
     +N="$N" \
     +VERBOSE="$VERBOSE" \

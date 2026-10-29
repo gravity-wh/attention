@@ -24,6 +24,45 @@ const int32_t EXP2_LUT32[33] = {
     32768
 };
 
+/* ---------------------------------------------- 确定性 exp（不调 libm）
+ * 为什么不能直接用 libm 的 exp()：
+ *   两份 float64 参考值必须逐位相同，否则「同一 seed → 同一向量」不成立。
+ *   实测同一个 seed 在 Linux(gcc 4.8.5/glibc) 与 Windows(gcc 15/conda)
+ *   上生成，ref.hex 有 3~18 个元素差 1~2 ulp —— 数值上完全无害
+ *   （2e-16 相对 0.06 的判据是噪声），但会让 git 里凭空出现 diff，
+ *   复现时无法判断"是别人改了设计还是换了编译器"。
+ *   根因是各 libm 的 exp 实现不同（也受 FMA 收缩影响）。这里只用
+ *   IEEE-754 基本四则 + ldexp，两者都是逐位确定的运算，与库无关。
+ *
+ * 算法：exp(x) = 2^n · e^r，其中 n = round(x·log2e)，r = x - n·ln2，|r| <= ln2/2。
+ *       ln2 用高低两段拆开，避免 n 较大时 n·ln2 的抵消误差。
+ *       e^r 用 13 阶泰勒（|r|<=0.3466 时截断误差 4e-18 < eps）。
+ * 实测：对 libm 的最大偏差 1 ulp（4e6 个采样点与 F=16 全部格点）。 */
+double attn_exp_f64(double x)
+{
+    static const double LOG2E  = 1.44269504088896340735992468100189214;
+    static const double LN2_HI = 6.93147180369123816490e-01;
+    static const double LN2_LO = 1.90821492927058770002e-10;
+    static const double C[14] = {
+        1.0, 1.0, 1.0 / 2.0, 1.0 / 6.0, 1.0 / 24.0, 1.0 / 120.0, 1.0 / 720.0,
+        1.0 / 5040.0, 1.0 / 40320.0, 1.0 / 362880.0, 1.0 / 3628800.0,
+        1.0 / 39916800.0, 1.0 / 479001600.0, 1.0 / 6227020800.0
+    };
+    double n, r, p;
+    int    k;
+
+    if (x > 709.0)  return HUGE_VAL;    /* 本工程用不到，留作防御 */
+    if (x < -745.0) return 0.0;
+
+    n = nearbyint(x * LOG2E);
+    r = (x - n * LN2_HI) - n * LN2_LO;
+
+    p = C[13];
+    for (k = 12; k >= 0; k--) p = p * r + C[k];
+
+    return ldexp(p, (int)n);
+}
+
 void attn_reset(void)
 {
     /* 本模型为纯组合函数，无跨任务状态。
@@ -139,7 +178,7 @@ void attn_fixed(const attn_cfg_t *c, const mat_in_t *in, mat_out_t *out)
             double ev[ATTN_MX];
             for (j = 0; j < ATTN_MX; j++) {
                 double d = (double)(m - S[i][j]) / ldexp(1.0, S_FRAC);
-                double x = exp(-d) * 65536.0;
+                double x = attn_exp_f64(-d) * 65536.0;
                 int64_t q = (int64_t)nearbyint(x);
                 if (q > 65536) q = 65536;
                 ev[j] = (double)q;
@@ -180,7 +219,10 @@ void attn_fixed(const attn_cfg_t *c, const mat_in_t *in, mat_out_t *out)
     }
 }
 
-/* --------------------------------------------------------- float64 参考 */
+/* --------------------------------------------------------- float64 参考
+ * 判据基准。exp 用 attn_exp_f64()（确定性实现）而不是 libm 的 exp()：
+ * 否则同一 seed 在不同机器上生成的 ref.hex 会差 1~2 ulp，
+ * "同一 seed 复现同一向量"这条就断了。 */
 void attn_ref(const mat_in_t *in, double y[ATTN_MX][ATTN_MX])
 {
     double S[ATTN_MX][ATTN_MX];
@@ -201,7 +243,7 @@ void attn_ref(const mat_in_t *in, double y[ATTN_MX][ATTN_MX])
         for (j = 1; j < ATTN_MX; j++)
             if (S[i][j] > m) m = S[i][j];
         for (j = 0; j < ATTN_MX; j++) {
-            P[i][j] = exp(S[i][j] - m);
+            P[i][j] = attn_exp_f64(S[i][j] - m);
             sum += P[i][j];
         }
         for (j = 0; j < ATTN_MX; j++) P[i][j] /= sum;

@@ -51,6 +51,9 @@ build() {
         -pvalue+tb_attn.CLK_MHZ="$CLOCK" \
         +define+DUT="$TOP" \
         "+define+DUT_NAME=\"$TOP\"" \
+        +define+ATTN_QB="$QB" \
+        +define+ATTN_QF="$QF" \
+        +define+ATTN_LUT="$LUT" \
         -f "$FLIST" \
         tb/common/attn_tb_pkg.sv \
         tb/sys/tb_attn.sv \
@@ -59,7 +62,7 @@ build() {
         -l "$RUN/build.log"
 }
 
-echo "[build] variant=$VARIANT top=$TOP clk=${CLOCK}MHz → $RUN/simv"
+echo "[build] variant=$VARIANT top=$TOP clk=${CLOCK}MHz cfg=${CFGTAG:?未设置 CFGTAG，请用 make 调用} → $RUN/simv"
 
 if build "$CM_OPTS"; then
     echo "[build] ✓ 编译通过${CM_OPTS:+（含覆盖率采集）}"
