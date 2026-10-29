@@ -1,0 +1,63 @@
+# 定点注意力模型 · 误差基线
+# seed = 20260101
+# 判据 RMSE <= 0.060, 最大绝对误差 <= 0.200（对 float64 参考）
+
+variant             qb  qf  lut  category        runs    maxRMSE   max|err| psum_dev   bitdiff finite  verdict
+-----------------------------------------------------------------------------------------------------------------------------------------
+A  16b lut4         16  13    4  random           200   0.000157   0.000637      4.0         0   yes  PASS
+A  16b lut4         16  13    4  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
+A  16b lut4         16  13    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+A  16b lut4         16  13    4  cancellation     200   0.000173   0.000600      3.0         0   yes  PASS
+A  16b lut4         16  13    4  reset-recover      4   0.000128   0.000573      4.0         0   yes  PASS
+A  16b lut4         16  13    4  consecutive        8   0.000147   0.000651      3.0         0   yes  PASS
+A  16b lut4         16  13    4  == ALL ==              0.000240   0.000761                           PASS
+
+A' 16b lut4-noapp   16  13    4  random           200   0.000152   0.000586      4.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  extreme          200   0.000227   0.000685      5.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  cancellation     200   0.000166   0.000576      3.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  reset-recover      4   0.000124   0.000573      2.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  consecutive        8   0.000134   0.000581      3.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  == ALL ==              0.000227   0.000685                           PASS
+
+B  16b lut2         16  13    2  random           200   0.000883   0.002640      4.0         0   yes  PASS
+B  16b lut2         16  13    2  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
+B  16b lut2         16  13    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
+B  16b lut2         16  13    2  cancellation     200   0.001166   0.002510      3.0         0   yes  PASS
+B  16b lut2         16  13    2  reset-recover      4   0.000783   0.002200      3.0         0   yes  PASS
+B  16b lut2         16  13    2  consecutive        8   0.000792   0.002470      3.0         0   yes  PASS
+B  16b lut2         16  13    2  == ALL ==              0.001210   0.003597                           PASS
+
+C  12b lut4         12   9    4  random           200   0.000696   0.003439      4.0         0   yes  PASS
+C  12b lut4         12   9    4  all-zero           4   0.000194   0.000435      0.0         0   yes  PASS
+C  12b lut4         12   9    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+C  12b lut4         12   9    4  cancellation     200   0.004232   0.009538      3.0         0   yes  PASS
+C  12b lut4         12   9    4  reset-recover      4   0.000526   0.002095      2.0         0   yes  PASS
+C  12b lut4         12   9    4  consecutive        8   0.000564   0.001853      3.0         0   yes  PASS
+C  12b lut4         12   9    4  == ALL ==              0.004232   0.009538                           PASS
+
+D  10b lut4         10   7    4  random           200   0.002118   0.008880      4.0         0   yes  PASS
+D  10b lut4         10   7    4  all-zero           4   0.000637   0.001660      0.0         0   yes  PASS
+D  10b lut4         10   7    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+D  10b lut4         10   7    4  cancellation     200   0.012376   0.028376      3.0         0   yes  PASS
+D  10b lut4         10   7    4  reset-recover      4   0.001889   0.006034      3.0         0   yes  PASS
+D  10b lut4         10   7    4  consecutive        8   0.001994   0.006814      3.0         0   yes  PASS
+D  10b lut4         10   7    4  == ALL ==              0.012376   0.028376                           PASS
+
+E   8b lut4          8   5    4  random           200   0.009508   0.044657      4.0         0   yes  PASS
+E   8b lut4          8   5    4  all-zero           4   0.002139   0.005285      0.0         0   yes  PASS
+E   8b lut4          8   5    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+E   8b lut4          8   5    4  cancellation     200   0.049565   0.119547      3.0         0   yes  PASS
+E   8b lut4          8   5    4  reset-recover      4   0.006861   0.024701      3.0         0   yes  PASS
+E   8b lut4          8   5    4  consecutive        8   0.007892   0.026029      2.0         0   yes  PASS
+E   8b lut4          8   5    4  == ALL ==              0.049565   0.119547                           PASS
+
+F   8b lut2          8   5    2  random           200   0.009519   0.042704      4.0         0   yes  PASS
+F   8b lut2          8   5    2  all-zero           4   0.002139   0.005285      0.0         0   yes  PASS
+F   8b lut2          8   5    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
+F   8b lut2          8   5    2  cancellation     200   0.049469   0.119669      3.0         0   yes  PASS
+F   8b lut2          8   5    2  reset-recover      4   0.006995   0.026410      4.0         0   yes  PASS
+F   8b lut2          8   5    2  consecutive        8   0.008015   0.028349      3.0         0   yes  PASS
+F   8b lut2          8   5    2  == ALL ==              0.049469   0.119669                           PASS
+
+# 汇总：0 个 (variant,category) 组合未通过

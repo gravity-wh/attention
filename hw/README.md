@@ -10,7 +10,7 @@
 | 路径 | 放什么 | 不许放什么 |
 |---|---|---|
 | `model/` | Python 黄金模型：bit-accurate 模型 + float64 参考 + 向量生成器 | 任何 RTL 相关的分析 |
-| `rtl/common/` | `attn_pkg.sv`（类型/参数/宏）、`attn_if.sv`（统一接口） | 具体运算逻辑 |
+| `rtl/common/` | `attn_pkg.sv`（类型/参数）、`attn_ports.svh`（统一端口宏） | 具体运算逻辑 |
 | `rtl/core/` | 三方案**共享**的数据通路：FP16 乘加、exp LUT、累加器、SRAM 包装 | 某个方案独有的调度逻辑 |
 | `rtl/ref/` `rtl/varA/` `rtl/varB/` | 该方案**独有**的顶层与引擎 + 该方案的 `filelist.f` | 三份重复的公共模块 |
 | `tb/unit/` | 单元级 testbench（对着 core 里每个模块） | 顶层用例 |
@@ -35,21 +35,17 @@
 ### 原则：接口共享 → 数据通路尽量共享 → 只有编排逻辑各占一坑
 
 ```
-        ┌──────────────────────────────────────────┐
-        │ rtl/common/attn_if.sv   ← 端口逐位一致，改这里=改三套│
-        └──────────────────────────────────────────┘
-                            ▲
+                  rtl/common/attn_ports.svh   ← 端口契约，改一次三套同时变
+                            │
       ┌─────────────────────┼─────────────────────┐
-      │                     │                     │
-  rtl/ref/             rtl/varA/             rtl/varB/
-  top_ref.sv           top_varA.sv           top_varB.sv
-  seq_engine.sv        dot8_engine.sv        systolic_engine.sv
+      ▼                     ▼                     ▼
+  rtl/ref/              rtl/varA/             rtl/varB/
+  top_ref.sv            top_varA.sv           top_varB.sv
+  seq_engine.sv         dot8_engine.sv        systolic_engine.sv
       │                     │                     │
       └─────────────────────┼─────────────────────┘
                             ▼
-        ┌──────────────────────────────────────────┐
-        │ rtl/core/  共享数据通路（乘加/exp/累加/SRAM）│
-        └──────────────────────────────────────────┘
+        rtl/core/  —— 共享数据通路（乘加树 / exp 近似 / 累加器 / SRAM 包装）
 ```
 
 ### 三条判定规则（拿不准时按这个问自己）
@@ -61,6 +57,19 @@
    `parameter`；不能，就说明它是结构差异，应该分文件放各自目录。
    **严禁让 ifdef 渗进 `core/` 的叶子模块**——三套代码会在一个文件里互相污染，
    答辩时没人看得懂，你自己两周后也看不懂。
+
+### 端口契约用宏，不用 SV interface
+
+三个顶层一字不差地这样开头：
+
+```systemverilog
+module top_ref #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
+module top_varA #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
+module top_varB #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
+```
+
+理由见下节实测：interface 在 iverilog 上直接语法错误，在 DC/Genus 上要额外开关
+才综合，而宏头文件在所有工具上都通行。**这是「本地能验」和「服务器能综合」的交集。**
 
 ### 为什么不用「三个分支」或「三个仓库」
 
@@ -132,7 +141,49 @@ git add -A && git commit -m "varA: KE=8, w=8 -> A=xx um2, D=xx us, E=xx nJ"
 
 ---
 
-## 五、版本管理规则
+## 五、工具与语言子集（2026-10-29 实测）
+
+### 本机现状
+
+| 工具 | 位置 | 状态 |
+|---|---|---|
+| Icarus Verilog **12.0** | WSL2 Ubuntu 24.04 `/usr/bin/iverilog` | ✅ 已装 |
+| GTKWave | 同上 | ✅ 已装 |
+| Verilator 5.020 | apt 源里有，未装 | ⬜ `sudo apt install verilator` |
+| VCS / Verdi 2023.12-SP2 | `H:\w1465\vcs verdi 2023.12\pkg`（Linux 安装包） | ❌ 需 Linux 虚拟机 + license，本机跑不了 |
+
+**工程在 `//home-nas` 这个 UNC 路径上，WSL 不能直接 `cd` 进去。**
+本机跑仿真的两条路：把 `hw/` 放本地盘（推荐，仿真 IO 快得多），或
+`sudo mount -t drvfs '\\home-nas\MyWork' /mnt/nas`（能用但慢）。
+
+### iverilog 12 的支持边界（决定了代码怎么写）
+
+实测结论，写 RTL 前先记住：
+
+| 语法特性 | iverilog 12 | 说明 |
+|---|---|---|
+| `package` / `typedef` / `enum` / `function` | ✅ | 已在 `attn_pkg.sv` 里用到 |
+| ANSI 端口 + package 限定类型 `p::fp16_t` | ✅ | |
+| `always_ff` / `always_comb` / `logic` | ✅ | |
+| 宏 + 反斜杠续行的多语句块 | ✅ | 这就是端口契约用宏的原因 |
+| **`interface` 出现在端口列表（`bus_if.dst b`）** | ❌ | 直接 syntax error |
+| **赋值模式 `'{hi:a, lo:b}`** | ❌ | struct 逐字段赋值得老实写 |
+| SVA 断言 / 功能覆盖率 / UVM | ❌ | 这三样只有 VCS 或 Verilator 能给 |
+
+> 结论：**不要为了"写得漂亮"用 interface**。它会让本机唯一可用的仿真器直接编译失败，
+> 而学校服务器上的 DC 综合又需要额外开关。宏头文件是唯一三边都通的选择。
+
+### 需要 SVA / 覆盖率时怎么办
+
+- 断言：iverilog 不支持，改写成 `if (cond) $display("FAIL: ..."); $finish;` 的检查块，
+  效果等价，只是不那么优雅。
+- 覆盖率：`tb/cov/` 里用 Python 统计"哪些场景跑过"，配合 `results/` 的表格做成证据，
+  这比 Verdi 的覆盖率报告更贴题（题面要的是六类场景都覆盖，不是行覆盖率数字）。
+- 真需要 UVM/Verdi 波形调试 → 找助教要实验室服务器，或按 `install_guide.pdf` 自己搭 VM。
+
+---
+
+## 六、版本管理规则
 
 ### 仓库
 
@@ -187,7 +238,7 @@ git archive --format=zip --prefix=Transform/ sub-v1 -o ../Transform_sub_v1.zip
 
 ---
 
-## 六、新人上手 3 分钟
+## 七、新人上手 3 分钟
 
 ```bash
 cd hw/

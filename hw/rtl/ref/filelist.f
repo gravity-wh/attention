@@ -10,9 +10,9 @@
 // =====================================================================
 +incdir+rtl/common
 
-// ---- 1. 公共层：三个方案共用 ----
+// ---- 1. 公共层：attn_pkg.sv（类型/参数）+ attn_ports.svh（统一端口宏）----
 rtl/common/attn_pkg.sv
-rtl/common/attn_if.sv
+rtl/common/attn_ports.svh
 
 // ---- 2. 共享数据通路：三方案尽量复用，以保「其余条件一致」----
 // rtl/core/fp16_mul.sv

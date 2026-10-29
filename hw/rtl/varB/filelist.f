@@ -13,7 +13,7 @@
 
 // ---- 1. 公共层：三方案共用（必须与 ref、varA 逐行一致）----
 rtl/common/attn_pkg.sv
-rtl/common/attn_if.sv
+rtl/common/attn_ports.svh
 
 // ---- 2. 共享数据通路 ----
 // rtl/core/fp16_mul.sv
