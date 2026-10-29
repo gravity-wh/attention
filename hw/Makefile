@@ -221,15 +221,16 @@ manifest: check
 	  echo "seed     : $(SEED)"; \
 	  echo "clock    : $(CLOCK) MHz"; \
 	  echo "pvt      : $(PVT)"; \
+	  echo "pdk      : $(PDK)"; \
 	  echo "sim      : $(SIM)"; \
 	  echo "syn      : $(SYN)"; \
 	  echo "commit   : $$(git rev-parse --short HEAD 2>/dev/null || echo 'NOT-A-REPO')"; \
-	  echo "dirty    : $$(git status --porcelain 2>/dev/null | wc -l) 个文件未提交"; \
+	  echo "dirty    : $$(git diff --name-only HEAD 2>/dev/null | wc -l) 个文件未提交"; \
 	  echo "host     : $$(hostname)"; \
 	  echo "time     : $$(date -Iseconds)"; \
 	} > $(RUN)/INFO.txt
 	@echo "-> $(RUN)/INFO.txt"
-	@test "$$(git status --porcelain 2>/dev/null | wc -l)" -eq 0 || \
+	@test "$$(git diff --name-only HEAD 2>/dev/null | wc -l)" -eq 0 || \
 	  echo "⚠ 工作区有未提交改动 —— 这次结果绑不到某个 commit，别急着写进报告"
 
 # ---------------- 6. 提交前自检（docs/engineering/01 §9）----------------

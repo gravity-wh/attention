@@ -19,7 +19,10 @@ SEED=${5:-20260101}
 VERBOSE=${6:-0}
 
 RUN="runs/$TAG"
-SIMV="$RUN/simv"
+# SIMV_NAME 允许改名：另一条跑道上的清理动作常用 `pkill -f simv`，
+# 名字一样就会被顺手杀掉（表现是某几类激励的日志是空的、结果莫名 FAIL）。
+# 需要并行跑两条跑道时设成别的名字即可，默认行为完全不变。
+SIMV="$RUN/${SIMV_NAME:-simv}"
 # 向量目录与 genvec.sh 保持同一套命名规则：smoke 无后缀，full 带 _full
 SUF=""
 [ "${MODE:-smoke}" = "full" ] && SUF="_full"

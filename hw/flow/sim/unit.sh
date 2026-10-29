@@ -89,7 +89,9 @@ for n in $NAMES; do
         continue
     fi
 
-    SUMMARY=$(grep -m1 '^\[UNIT\] name=' "$LOG" | tail -1)
+    # 取**最后一条** [UNIT] name= 行：第一条是表头（只有参数），
+    # 末条才带 checked=/fail= 统计。用 -m1 取到表头会让整列变成空。
+    SUMMARY=$(grep -E '^\[UNIT\] name=' "$LOG" | tail -1)
     STATUS=$(sed -n 's/^\[SUMMARY\].*status=\([A-Z]*\).*/\1/p' "$LOG" | tail -1)
     [ -z "$STATUS" ] && STATUS="NO-SUMMARY"
 

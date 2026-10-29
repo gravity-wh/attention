@@ -58,11 +58,11 @@ build() {
         tb/common/attn_tb_pkg.sv \
         tb/sys/tb_attn.sv \
         -Mdir="$RUN/csrc" \
-        -o "$RUN/simv" \
+        -o "$RUN/${SIMV_NAME:-simv}" \
         -l "$RUN/build.log"
 }
 
-echo "[build] variant=$VARIANT top=$TOP clk=${CLOCK}MHz cfg=${CFGTAG:?未设置 CFGTAG，请用 make 调用} → $RUN/simv"
+echo "[build] variant=$VARIANT top=$TOP clk=${CLOCK}MHz cfg=${CFGTAG:?未设置 CFGTAG，请用 make 调用} → $RUN/${SIMV_NAME:-simv}"
 
 if build "$CM_OPTS"; then
     echo "[build] ✓ 编译通过${CM_OPTS:+（含覆盖率采集）}"
