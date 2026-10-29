@@ -1,5 +1,5 @@
 // =====================================================================
-//  方案 varA —— 方案 A —— 8 路并行点积（KE 阵列）
+//  方案 varA —— 方案 A —— 4 lane 并行 + 稀疏跳过 + softmax 三级流水
 //
 //  这份 filelist 同时是「仿真」和「综合」的唯一输入。
 //  路径约定：全部相对 hw/ 目录（所有流程都在 hw/ 下执行）
@@ -28,5 +28,4 @@ rtl/core/fix2fp16.sv
 rtl/core/recip_unit.sv
 
 // ---- 3. 本方案独有 ----
-// rtl/varA/top_varA.sv
-// rtl/varA/dot8_engine.sv（8 lane 并行点积）
+rtl/varA/top_varA.sv

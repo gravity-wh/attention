@@ -13,25 +13,35 @@
 
 VARIANTS := ref varA varB
 
+# ---- 时钟：三方案必须同频，这是"成对测量"的前提 ------------------------
+#   ⚠️ 曾经给 varA/varB 配 200MHz、ref 留 100MHz，这是错的：
+#      ref 是纯串行结构（一拍一次 16 位乘加），几乎肯定也能跑 200MHz，
+#      单独给它降频等于白送 varA 2 倍时延优势，40 分的效率对比当场作废。
+#   现在的做法：**三方案一律 100MHz**，时延差异只来自周期数；
+#   "这个设计还能跑多快"由综合报的 fmax 单独回答（metrics 的 fmax_mhz 列），
+#   不混进时延这一列。想把频率也当成设计变量，就必须三方案各自做
+#   时序收敛并给出 WNS 证据，而不是拍一个数。
+CLOCK_MHZ := 100
+
 # ---- ref：统一参考实现（评分基准）-----------------------------------
 # 铁律：只允许做「工艺适配」（换库、按库重设驱动/尺寸），结构上不许改差
 # —— 改差了综合效率那 40 分就失真了。
 top_ref := top_ref
-clock_ref := 100
+clock_ref := $(CLOCK_MHZ)
 sdc_ref := clk_ref.sdc
 desc_ref := 统一参考实现：单 MAC 串行点积 + 线性扫描 Softmax + 串行加权求和
 
 # ---- varA：方案 A ---------------------------------------------------
 top_varA := top_varA
-clock_varA := 200
+clock_varA := $(CLOCK_MHZ)
 sdc_varA := clk_varA.sdc
-desc_varA := 方案A：8 路并行点积（KE 阵列）
+desc_varA := 方案A：4 lane 并行点积 + P·V 零组跳过 + Softmax 三级流水
 
 # ---- varB：方案 B（与 A 至少隔离一个主要变量）------------------------
 top_varB := top_varB
-clock_varB := 200
+clock_varB := $(CLOCK_MHZ)
 sdc_varB := clk_varB.sdc
-desc_varB := 方案B：脉动阵列 + 在线 Softmax
+desc_varB := 方案B：行融合（不存 S/P 全矩阵）+ 8 lane 并行
 
 # ---- PVT 角 ----------------------------------------------------------
 # 已移到 config/pdk.mk：角的选择与它对应的 .lib 是同一件事，
