@@ -1,0 +1,72 @@
+# =====================================================================
+#  数字集成电路设计 · 课程项目 .gitignore
+#  原则：源码 / 脚本 / 向量 / 提取后的指标 进库；
+#        一切「跑一次就生成」的东西不进库。
+# =====================================================================
+
+# ---- 仿真产物 ----
+*.vcd
+*.fsdb
+*.fst
+*.shm
+*.vpd
+*.wlf
+*.sdf
+*.saif
+simv
+simv.daidir/
+csrc/
+obj_dir/
+xsim.dir/
+xcelium.d/
+INCA_libs/
+work/
+*.log
+*.jou
+*.str
+transcript
+wave*.do
+
+# ---- 综合 / 后端产物 ----
+*.ddc
+*.db
+*.sdb
+*.svf
+*.mapped.v
+*.mapped.sdc
+*.spef
+*.def
+*.gds
+*.oas
+*.ndm
+*.enc.dat
+alib-*/
+fascia/
+*.pwr
+*.fsdb.gz
+
+# ---- 运行目录（每次跑都新建，只留占位）----
+hw/runs/**
+!hw/runs/.gitkeep
+
+# ---- 交付导出物（报告 pdf / pptx / 打包 zip）----
+deliverables/**
+!deliverables/.gitkeep
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# ---- 大文件红线：单文件 > 20MB 一律不进库（用 Git LFS 或外链）----
