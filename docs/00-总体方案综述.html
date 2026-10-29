@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>题目一 · 总体方案综述 | Transformer 注意力计算模块</title>
+<style>
+:root{
+  --bg:#FDFDFB; --surface:#FFFFFF; --surface-2:#F5F4EF; --surface-3:#EFEEE7;
+  --ink:#1B1A17; --ink-2:#45423B; --muted:#78736A; --faint:#A9A395;
+  --line:#E4E0D6; --line-2:#D2CCBC;
+  --accent:#2F5D7C; --accent-2:#3F7CA3; --accent-soft:#EAF1F6;
+  --ok:#2C7A5B; --ok-soft:#E9F3EE;
+  --warn:#9C6E16; --warn-soft:#FBF3E1;
+  --bad:#9E3B32; --bad-soft:#FBEBE8;
+  --mono:“JetBrains Mono”,“Cascadia Mono”,Consolas,“Courier New”,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,“Segoe UI”,“Microsoft YaHei”,“PingFang SC”,“Source Han Sans SC”,sans-serif;
+  --maxw:920px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.78;
+  font-feature-settings:“kern” 1,“liga” 1;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px 100px}
+a{color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(47,93,124,.25)}
+a:hover{border-bottom-color:var(--accent)}
+
+/* ---------- 顶部条 ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:rgba(253,253,251,.92); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-in{
+  max-width:var(--maxw); margin:0 auto; padding:11px 28px;
+  display:flex; align-items:center; gap:16px; font-size:12.5px; color:var(--muted);
+}
+.topbar-in b{color:var(--ink); font-weight:600; letter-spacing:.02em}
+.topbar-in .sep{flex:1}
+.topbar-in a{color:var(--muted); border:0}
+.topbar-in a:hover{color:var(--accent)}
+
+/* ---------- 封面 ---------- */
+.hero{padding:64px 0 34px; border-bottom:1px solid var(--line)}
+.kicker{
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:16px;
+}
+h1{
+  font-size:40px; line-height:1.22; margin:0 0 18px; letter-spacing:-.02em;
+  font-weight:700;
+}
+h1 .thin{color:#8C8677; font-weight:400}
+.lede{font-size:17px; color:var(--ink-2); max-width:44em; margin:0 0 26px}
+.lede code{font-family:var(--mono); font-size:.92em; background:var(--surface-2); padding:1px 5px; border-radius:3px}
+.meta-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:30px}
+.chip{
+  font-size:12px; padding:3px 10px; border-radius:999px;
+  background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line);
+}
+.chip b{font-weight:600; color:var(--ink)}
+.chip.acc{background:var(--accent-soft); border-color:#CFDFEA; color:#25506C}
+
+/* ---------- KPI ---------- */
+.kpi{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--line); border:1px solid var(--line); border-radius:2px; overflow:hidden;
+}
+.kpi div{background:var(--surface); padding:16px 18px}
+.kpi .k{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; color:var(--faint); text-transform:uppercase; margin-bottom:6px}
+.kpi .v{font-size:23px; font-weight:650; letter-spacing:-.01em; line-height:1.25}
+.kpi .v small{font-size:12px; font-weight:400; color:var(--muted); margin-left:3px}
+.kpi .n{font-size:11.5px; color:var(--muted); margin-top:2px}
+
+/* ---------- 目录 ---------- */
+.toc{
+  margin:34px 0 0; padding:22px 24px; background:var(--surface);
+  border:1px solid var(--line); border-radius:2px;
+}
+.toc h2{
+  font-size:11px; font-family:var(--mono); letter-spacing:.16em;
+  text-transform:uppercase; color:var(--faint); margin:0 0 14px; font-weight:500;
+}
+.toc ol{margin:0; padding:0; list-style:none; counter-reset:t;
+  display:grid; grid-template-columns:1fr 1fr; gap:2px 28px;
+}
+.toc li{counter-increment:t; font-size:14px; padding:5px 0; border-bottom:1px dotted var(--line)}
+.toc li a{border:0; color:var(--ink-2); display:flex; gap:10px}
+.toc li a:hover{color:var(--accent)}
+.toc li a::before{
+  content:counter(t,decimal-leading-zero); font-family:var(--mono);
+  font-size:11px; color:var(--faint); padding-top:2px;
+}
+
+/* ---------- 章节 ---------- */
+section{padding-top:56px}
+h2.sec{
+  font-size:25px; margin:0 0 6px; letter-spacing:-.015em; font-weight:680;
+  display:flex; align-items:baseline; gap:14px;
+}
+h2.sec .num{
+  font-family:var(--mono); font-size:12px; color:var(--accent);
+  letter-spacing:.1em; font-weight:500; padding:3px 8px;
+  background:var(--accent-soft); border-radius:3px;
+}
+.sub{color:var(--muted); font-size:14.5px; margin:0 0 26px; padding-left:2px}
+h3{font-size:16.5px; margin:36px 0 10px; font-weight:650; letter-spacing:-.005em}
+h3::before{content:“▍”; color:var(--line-2); margin-right:8px; font-size:13px}
+h4{font-size:14px; margin:22px 0 8px; color:var(--ink-2); font-weight:600}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px; padding-left:22px}
+li{margin:5px 0}
+strong{font-weight:650}
+code{font-family:var(--mono); font-size:.87em; background:var(--surface-2);
+  padding:1px 5px; border-radius:3px; color:#3A3730}
+
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto; margin:18px 0 22px; border:1px solid var(--line); border-radius:2px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:13.5px; line-height:1.6}
+th{
+  text-align:left; font-weight:600; font-size:11.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted); background:var(--surface-2);
+  padding:10px 13px; border-bottom:1px solid var(--line-2); white-space:nowrap;
+}
+td{padding:10px 13px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#FBFBF7}
+td.num,th.num{font-family:var(--mono); font-size:12.5px; text-align:right; white-space:nowrap}
+td.c,th.c{text-align:center}
+caption{caption-side:bottom; text-align:left; font-size:12px; color:var(--muted); padding:9px 13px}
+
+/* ---------- 卡片 ---------- */
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:2px;
+  padding:18px 20px; margin:16px 0;
+}
+.card h4{margin-top:0}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:18px 0}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:18px 0}
+.var-card{background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--line-2); padding:16px 18px}
+.var-card.ref{border-top-color:#8A8577}
+.var-card.a{border-top-color:var(--accent)}
+.var-card.b{border-top-color:var(--ok)}
+.var-card .vh{display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:4px}
+.var-card .vt{font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--muted)}
+.var-card .vn{font-size:15.5px; line-height:1.42; font-weight:650; margin-bottom:6px; min-height:2.84em}
+.var-card p{font-size:13px; color:var(--ink-2); margin:0 0 10px}
+.var-card .facts{font-size:12px; color:var(--muted); font-family:var(--mono); line-height:1.9; border-top:1px dotted var(--line); padding-top:9px}
+.var-card .facts b{color:var(--ink-2); font-weight:600}
+
+/* ---------- 提示块 ---------- */
+.callout{
+  border-left:3px solid var(--line-2); background:var(--surface-2);
+  padding:14px 18px; margin:18px 0; font-size:14px; color:var(--ink-2);
+}
+.callout b,.callout strong{color:var(--ink)}
+.callout.key{border-left-color:var(--accent); background:var(--accent-soft)}
+.callout.warn{border-left-color:#C79A3C; background:var(--warn-soft)}
+.callout.bad{border-left-color:var(--bad); background:var(--bad-soft)}
+.callout .lbl{
+  display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:5px;
+}
+.callout p:last-child{margin-bottom:0}
+
+/* ---------- 状态标签 ---------- */
+.tag{
+  display:inline-block; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.06em; padding:1px 7px; border-radius:2px;
+  border:1px solid transparent; white-space:nowrap; vertical-align:1px;
+}
+.tag.ok{background:var(--ok-soft); color:var(--ok); border-color:#CBE2D6}
+.tag.wip{background:var(--warn-soft); color:var(--warn); border-color:#EBD9AF}
+.tag.todo{background:var(--bad-soft); color:var(--bad); border-color:#EFD3CE}
+.tag.plan{background:var(--surface-3); color:var(--muted); border-color:var(--line-2)}
+.tag.acc{background:var(--accent-soft); color:var(--accent); border-color:#CFDFEA}
+
+/* ---------- 图 ---------- */
+figure{margin:24px 0 26px}
+figure svg{display:block; width:100%; height:auto; border:1px solid var(--line); background:var(--surface)}
+figcaption{font-size:12.5px; color:var(--muted); margin-top:9px; padding-left:2px}
+figcaption b{color:var(--ink-2); font-weight:600}
+
+/* ---------- 目录树 ---------- */
+pre{
+  font-family:var(--mono); font-size:12.5px; line-height:1.72;
+  background:var(--surface); border:1px solid var(--line); border-radius:2px;
+  padding:16px 18px; overflow-x:auto; margin:18px 0; color:var(--ink-2);
+}
+pre .c{color:var(--faint)}
+pre .h{color:var(--accent); font-weight:600}
+
+/* ---------- 页脚 ---------- */
+footer{
+  margin-top:70px; padding-top:22px; border-top:1px solid var(--line);
+  font-size:12.5px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px 22px;
+}
+footer .sep{flex:1}
+
+@media (max-width:760px){
+  .wrap{padding:0 18px 70px}
+  .topbar-in{padding:10px 18px; gap:10px}
+  .topbar-in a.opt{display:none}
+  h1{font-size:29px}
+  .lede{font-size:15.5px}
+  .kpi{grid-template-columns:1fr 1fr}
+  .toc ol{grid-template-columns:1fr}
+  .grid3,.grid2{grid-template-columns:1fr}
+  h2.sec{font-size:21px; flex-wrap:wrap}
+  section{padding-top:42px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <b>题目一</b>
+    <span>Transformer 注意力计算模块</span>
+    <span class="sep"></span>
+    <a href="#s03" class="opt">方案</a>
+    <a href="#s05" class="opt">验证</a>
+    <a href="#s06" class="opt">PDK</a>
+    <a href="#s08">进度</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ================= 封面 ================= -->
+<header class="hero">
+  <div class="kicker">数字集成电路设计 · 2026 秋 · 课程设计</div>
+  <h1>一个 16×16 注意力模块<br><span class="thin">从题面约束到可测硅前数据的完整链路</span></h1>
+  <p class="lede">
+    这份页面综述我们对<b>题目一</b>的整体取法：算 <code>Y = Softmax(Q·Kᵀ/4)·V</code>，
+    输入输出限定 FP16、规模锁死 16×16、输入限 [−2, 2]。真正要决定的不是“怎么算”，
+    而是<b>用什么数值格式算、用什么结构算、用什么工具证明它算对了</b>——本文把这三件事
+    连同工艺库与统计口径一起摊开，说明每个选择背后的依据和代价。
+  </p>
+  <div class="meta-row">
+    <span class="chip acc">路线：<b>定点量化 + 近似 Softmax + 结构并行</b></span>
+    <span class="chip">工艺：<b>GPDK045</b> 45 nm</span>
+    <span class="chip">仿真：<b>VCS V-2023.12-SP2</b></span>
+    <span class="chip">综合：<b>Genus 15.20</b></span>
+    <span class="chip">向量 seed：<b>20260101</b></span>
+  </div>
+
+  <div class="kpi">
+    <div>
+      <div class="k">精度 · 最坏 RMSE</div>
+      <div class="v">3.9e−3<small>／限 0.06</small></div>
+      <div class="n">15 倍余量，相干叠加退化下仍 ×3</div>
+    </div>
+    <div>
+      <div class="k">数值格式 · 主方案</div>
+      <div class="v">s10.7</div>
+      <div class="n">乘法器面积 ≈ 16 bit 方案的 39%</div>
+    </div>
+    <div>
+      <div class="k">ref 基准 · 时延</div>
+      <div class="v">9665<small> 拍</small></div>
+      <div class="n">@100 MHz ≈ 96.7 µs</div>
+    </div>
+    <div>
+      <div class="k">验证 · 逐位一致</div>
+      <div class="v">0<small> 失配</small></div>
+      <div class="n">六类激励各 2 任务全 PASS</div>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#s01">题目要求：到底在考什么</a></li>
+      <li><a href="#s02">总体技术路线</a></li>
+      <li><a href="#s03">方案选取：三套实现 + 一条数值主线</a></li>
+      <li><a href="#s04">数值契约：位宽是怎么定下来的</a></li>
+      <li><a href="#s05">仿真与验证环境</a></li>
+      <li><a href="#s06">PDK 与综合环境</a></li>
+      <li><a href="#s07">工程结构与复现体系</a></li>
+      <li><a href="#s08">现状、风险与下一步</a></li>
+    </ol>
+  </nav>
+</header>
+
+<!-- ================= 01 ================= -->
+<section id="s01">
+  <h2 class="sec"><span class="num">01</span>题目要求：到底在考什么</h2>
+  <p class="sub">把 9 页题面拆成三条互不重叠的约束：数值上必须对，结构上必须比，口径上必须同。</p>
+
+  <p>题面写得很短，但真正的难点不在“实现一个注意力模块”——16×16 的矩阵乘法，一个本科生两天就能写出来。
+  难点在于它同时提出了<b>三个方向相反的要求</b>：</p>
+
+  <div class="grid3">
+    <div class="card">
+      <h4>① 数值上必须「对」</h4>
+      <p style="font-size:13px;margin-bottom:0">输出要与 float64 参考的 RMSE ≤ 0.06、单元素误差 ≤ 0.20，
+      同时还要与自己那份软件模型<b>逐位一致</b>。前者管“算得准”，后者管“算得和你说的一样”。</p>
+    </div>
+    <div class="card">
+      <h4>② 结构上必须「比」</h4>
+      <p style="font-size:13px;margin-bottom:0">至少两套方案 + 一组单变量对照。而 40 分的效率项不是绝对指标，
+      是<b>相对于统一参考实现的改善倍数</b>——所以必须有一把“没优化过”的尺子。</p>
+    </div>
+    <div class="card">
+      <h4>③ 口径上必须「同」</h4>
+      <p style="font-size:13px;margin-bottom:0">同工艺、同工具、同角、同电压温度、同驱动负载、同评测规则。
+      这句话决定了整个工程的组织方式：<b>三套实现必须能被同一份 tb 驱动</b>。</p>
+    </div>
+  </div>
+
+  <h3>硬指标速查</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>类别</th><th>项目</th><th>要求</th><th class="c">性质</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4">规模</td><td>矩阵</td><td>Q / K / V / Y 均为 <code>16×16</code>，共 256 元素</td><td class="c">锁死</td></tr>
+      <tr><td>Softmax</td><td>按行执行（16 行 × 16 列）</td><td class="c">锁死</td></tr>
+      <tr><td>I/O 格式</td><td>IEEE 754 binary16（FP16）</td><td class="c">锁死</td></tr>
+      <tr><td>输入范围</td><td>[−2, 2] 内有限值</td><td class="c">锁死</td></tr>
+      <tr><td rowspan="2">精度</td><td>单帧 RMSE（对 float64）</td><td>≤ 0.06（= 尺度 2 的 3%）</td><td class="c">硬判据</td></tr>
+      <tr><td>最大绝对误差</td><td>≤ 0.20（= 尺度 2 的 10%）</td><td class="c">硬判据</td></tr>
+      <tr><td rowspan="3">验证</td><td>激励覆盖</td><td>随机 / 全零 / 正负极值 / 相消 / 复位 / 连续任务，六类</td><td class="c">硬判据</td></tr>
+      <tr><td>与自身模型</td><td>逐位一致（0 个元素不同）</td><td class="c">硬判据</td></tr>
+      <tr><td>输出有限性</td><td>无 inf / NaN</td><td class="c">硬判据</td></tr>
+      <tr><td rowspan="2">实现</td><td>可综合性</td><td>Verilog / SystemVerilog，可综合</td><td class="c">硬判据</td></tr>
+      <tr><td>方案数量</td><td>≥ 2 套，并隔离 ≥ 1 个主要变量</td><td class="c">硬判据</td></tr>
+      <tr><td>自由度</td><td>内部格式 / 位宽 / 近似方法 / 并行结构</td><td>完全自主</td><td class="c">—</td></tr>
+    </tbody>
+    <caption>来源：<code>docs/assignment/题目一-Transformer注意力模块-需求整理.md</code> §2.2–2.4。</caption>
+  </table>
+  </div>
+
+  <h3>评分结构决定了工程的重心</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>项目</th><th>内容</th><th class="num">分值</th><th>它实际要求你留下什么</th></tr></thead>
+    <tbody>
+      <tr><td>功能与验证</td><td>功能正确、精度达标、验证充分</td><td class="num">30</td><td>一份自检测试平台 + 六类回归记录</td></tr>
+      <tr><td>理论分析</td><td>方案依据、结构优化、对照实验解释</td><td class="num">20</td><td>位宽从哪来、结构为什么这么选</td></tr>
+      <tr><td>报告与复现</td><td>代码、脚本、原始结果、版本说明</td><td class="num">10</td><td>每个数字都能顺着 TAG 追回日志</td></tr>
+      <tr><td><strong>综合效率</strong></td><td><strong>相对参考实现的资源 / 时延 / 能耗改善</strong></td><td class="num">40</td><td>三套实现 + 同一套约束 + 成对测量</td></tr>
+    </tbody>
+    <caption>效率项占 40%，但它<b>不可单独获得</b>：必须先有一个被承认的参考实现，且三者的综合条件逐字相同。所以“工程组织”本身是得分项。</caption>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">由此得到的第一条设计原则</span>
+    <p>不要把三套实现写成三份代码。<b>接口共享 → 数据通路尽量共享 → 只有编排逻辑各占一坑</b>。
+    这样“其余条件一致”不是靠人守着，而是结构上不可能不一致。</p>
+  </div>
+</section>
+
+<!-- ================= 02 ================= -->
+<section id="s02">
+  <h2 class="sec"><span class="num">02</span>总体技术路线</h2>
+  <p class="sub">六层：题面约束 → 数值契约 → RTL 三方案 → 验证 → 综合 → 报告。每层只对下一层负责。</p>
+
+  <p>整条链路的组织原则是<b>单向依赖、逐层收口</b>：上一层的产物是下一层的唯一输入，任何一层都不许
+    “顺手”改变上一层的决定。这条纪律换来的是可复现性——报告里每个数字都能指回一个文件、一个 commit、一次运行。</p>
+
+  <figure>
+    <svg viewBox="0 0 884 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="总体技术路线六层流程图">
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+          <path d="M0,0 L7,3.2 L0,6.4 z" fill="#9A9484"/>
+        </marker>
+        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+          <path d="M0,0 L7,3.2 L0,6.4 z" fill="#2F5D7C"/>
+        </marker>
+      </defs>
+
+      <!-- L1 -->
+      <text x="24" y="34" font-family="monospace" font-size="10.5" fill="#A9A395" letter-spacing="1.4">L1 · 约束</text>
+      <rect x="24" y="44" width="812" height="62" rx="2" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="44" y="70" font-size="13" font-weight="600" fill="#1B1A17">题面硬约束（不可协商）</text>
+      <text x="44" y="90" font-size="11.5" fill="#6B675E" font-family="monospace">16×16 · FP16 I/O · 输入 ∈ [−2,2] · 行 Softmax · RMSE ≤ 0.06 · MaxAE ≤ 0.20</text>
+      <text x="700" y="70" font-size="11" fill="#9E3B32">固定</text>
+
+      <!-- arrow -->
+      <line x1="430" y1="106" x2="430" y2="126" stroke="#9A9484" stroke-width="1.2" marker-end="url(#ar)"/>
+
+      <!-- L2 -->
+      <text x="24" y="142" font-family="monospace" font-size="10.5" fill="#A9A395" letter-spacing="1.4">L2 · 数值</text>
+      <rect x="24" y="152" width="812" height="74" rx="2" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="44" y="176" font-size="13" font-weight="600" fill="#1B1A17">数值契约 → 唯一真源 attn_model.h / attn_pkg.sv</text>
+      <text x="44" y="196" font-size="11.5" fill="#3A4A55" font-family="monospace">Q/K/V → s10.7 ｜ QKᵀ acc 22b ｜ S,p = F16 ｜ PV acc 30b ｜ y = F13 ｜ 全程 RNE</text>
+      <text x="44" y="214" font-size="11.5" fill="#3A4A55" font-family="monospace">Softmax: exp2 = 2⁻ⁿ · LUT(f)[16 段] ＋ 线性插值；每行 1 次倒数替代 16 次除法</text>
+
+      <line x1="430" y1="226" x2="430" y2="246" stroke="#9A9484" stroke-width="1.2" marker-end="url(#ar)"/>
+
+      <!-- L3 -->
+      <text x="24" y="262" font-family="monospace" font-size="10.5" fill="#A9A395" letter-spacing="1.4">L3 · 结构</text>
+      <rect x="24" y="272" width="812" height="72" rx="2" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <text x="44" y="296" font-size="13" font-weight="600" fill="#1B1A17">RTL 三方案（共享 core，仅编排逻辑分家）</text>
+      <rect x="44" y="306" width="236" height="26" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="54" y="323" font-size="11" font-family="monospace" fill="#45423B">ref  单 MAC 串行 · 100 MHz · 分母</text>
+      <rect x="292" y="306" width="236" height="26" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="302" y="323" font-size="11" font-family="monospace" fill="#25506C">varA  8 lane 并行点积 · 200 MHz</text>
+      <rect x="540" y="306" width="236" height="26" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="550" y="323" font-size="11" font-family="monospace" fill="#22604A">varB  脉动阵列 + 在线 Softmax</text>
+
+      <line x1="430" y1="344" x2="430" y2="364" stroke="#9A9484" stroke-width="1.2" marker-end="url(#ar)"/>
+
+      <!-- L4 -->
+      <text x="24" y="380" font-family="monospace" font-size="10.5" fill="#A9A395" letter-spacing="1.4">L4 · 验证</text>
+      <rect x="24" y="390" width="812" height="58" rx="2" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <text x="44" y="413" font-size="13" font-weight="600" fill="#1B1A17">一份 tb 驱动三个 DUT</text>
+      <text x="44" y="433" font-size="11.5" fill="#6B675E" font-family="monospace">+define+DUT=top_xxx ｜ 六类激励 ｜ 双判据：逐位一致 ＋ RMSE/MaxAE ｜ 向量由 C 模型导出</text>
+
+      <line x1="430" y1="448" x2="430" y2="468" stroke="#9A9484" stroke-width="1.2" marker-end="url(#ar)"/>
+
+      <!-- L5 -->
+      <rect x="24" y="474" width="812" height="42" rx="2" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <text x="44" y="492" font-size="12.5" font-weight="600" fill="#1B1A17">L5 · 综合　Genus 15.20 ＋ GPDK045（tt/ff/ss）</text>
+      <text x="44" y="508" font-size="11.5" fill="#6B675E" font-family="monospace">同一份映射取 A / WNS / P  →  D = lat / f  →  E = P × D  →  相对改善 A₀/A、D₀/D、E₀/E  →  报告表 2 / 表 3</text>
+
+      <!-- side feedback -->
+      <path d="M836 421 L858 421 L858 189 L836 189" fill="none" stroke="#2F5D7C" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#ar2)"/>
+    </svg>
+    <figcaption><b>图 1</b>　总体技术路线。虚线是唯一的逆向通道：验证失配时，先判定是模型错还是 RTL 错，
+      模型是规格书，改完模型必须重出向量。</figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="lbl">顺序铁律</span>
+    <p><b>先模型、后 RTL。</b> <code>attn_model.c</code> 里的 <code>attn_fixed()</code> 是逐位模型，
+    它同时是 RTL 的规格书和比对对象。RTL 写不通时正确的动作是<b>先改模型</b>（因为它更容易改对），
+    RTL 只是把已经跑通的模型翻译成硬件。“模型和 RTL 各错一半、碰巧对上”是这项最容易踩的坑。</p>
+  </div>
+</section>
+
+<!-- ================= 03 ================= -->
+<section id="s03">
+  <h2 class="sec"><span class="num">03</span>方案选取：三套实现 + 一条数值主线</h2>
+  <p class="sub">ref 提供分母，varA 隔离并行度，varB 隔离数据流形态；三者共享数值格式与数据通路。</p>
+
+  <p>题面要求“实现并比较至少两个设计方案”，并且效率分建立在“相对统一参考实现的改善”上。
+  这句话把方案设计变成了一个<b>正交分解</b>问题：如果要报三个相对改善倍数，就必须清楚每个方案
+  相对基准动了哪一个变量，否则改善归因不清，20 分的理论分析也写不实。</p>
+
+  <h3>三套实现的分工</h3>
+  <div class="grid3">
+    <div class="var-card ref">
+      <div class="vh"><span class="vt">TOP_REF</span><span class="tag plan">基准</span></div>
+      <div class="vn">统一参考实现</div>
+      <p>一条 16 深 MAC 通道、逐元素串行。最大的特点是<b>故意不优化</b>：它就是效率对比里
+        “面积最小、延迟最长”的那一端，也是三方案的功能标尺。</p>
+      <div class="facts">
+        结构　单 MAC 串行点积<br>
+        数值　qb16 / qf13（贴近 FP16）<br>
+        频率　<b>100 MHz</b><br>
+        实测　<b>9665 拍</b> · 六类 PASS
+      </div>
+    </div>
+    <div class="var-card a">
+      <div class="vh"><span class="vt">TOP_VARA</span><span class="tag wip">实现中</span></div>
+      <div class="vn">方案 A · 8 路并行点积</div>
+      <p>把点积按 K 的元素切成 8 路，一个 S 元素 2 拍出结果。隔离的变量是
+        <b>并行度</b>——数值格式与 ref 之外的其余条件完全一致。</p>
+      <div class="facts">
+        结构　KE 阵列，8 lane<br>
+        数值　qb10 / qf7<br>
+        频率　<b>200 MHz</b><br>
+        周期　<span class="tag todo">待测</span>
+      </div>
+    </div>
+    <div class="var-card b">
+      <div class="vh"><span class="vt">TOP_VARB</span><span class="tag wip">实现中</span></div>
+      <div class="vn">方案 B · 脉动阵列 + 在线 Softmax</div>
+      <p>改的是<b>数据流形态</b>而不是并行度：Q 驻留、K 流入，把 S 的产出顺序与 Softmax
+        的行推进对齐，减少中间缓冲。它与 A 至少隔离一个主要变量。</p>
+      <div class="facts">
+        结构　16×16 脉动阵列<br>
+        数值　qb10 / qf7（与 A 相同）<br>
+        频率　<b>200 MHz</b><br>
+        周期　<span class="tag todo">待测</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">为什么 varA 与 varB 用同一套数值格式</span>
+    <p>如果两套方案的位宽不同，A 与 B 的差异里就同时混进了“结构”和“精度”两个变量，
+    对照实验立刻失效。<b>数值格式固定为 qb10/qf7，只在结构上做文章</b>；
+    ref→varA 的差值是“不做优化 vs 做优化”的总账，这正是 40 分要报的那笔账。</p>
+  </div>
+
+  <h3>数据流形态</h3>
+  <figure>
+    <svg viewBox="0 0 860 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三方案数据流与并行度对比">
+      <defs>
+        <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 z" fill="#9A9484"/>
+        </marker>
+      </defs>
+
+      <!-- panel 1 -->
+      <rect x="18" y="16" width="262" height="298" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <rect x="18" y="16" width="262" height="30" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="32" y="36" font-size="12" font-weight="600" fill="#45423B" font-family="monospace">ref · 串行单 MAC</text>
+      <text x="246" y="36" font-size="10" fill="#9A9484">100 MHz</text>
+
+      <rect x="36" y="60" width="226" height="34" fill="#FDFDFB" stroke="#E4E0D6"/>
+      <text x="48" y="81" font-size="11" fill="#45423B">装载 Q / K / V（各 256 元素）</text>
+      <line x1="149" y1="94" x2="149" y2="108" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="36" y="110" width="226" height="40" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="48" y="128" font-size="11" font-weight="600" fill="#1B1A17">S = Q·Kᵀ</text>
+      <text x="48" y="143" font-size="10.5" fill="#6B675E" font-family="monospace">1 条 16 深 MAC ｜ 16 拍/元素 ｜ 4096 拍</text>
+      <line x1="149" y1="150" x2="149" y2="164" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="36" y="166" width="226" height="40" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="48" y="184" font-size="11" font-weight="600" fill="#1B1A17">Softmax（行）</text>
+      <text x="48" y="199" font-size="10.5" fill="#6B675E" font-family="monospace">max → exp2 → 倒数 → 归一 ｜ 1424 拍</text>
+      <line x1="149" y1="206" x2="149" y2="220" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="36" y="222" width="226" height="40" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="48" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
+      <text x="48" y="255" font-size="10.5" fill="#6B675E" font-family="monospace">同一条 MAC ｜ 4096 拍 ＋ 输出 256</text>
+      <text x="36" y="288" font-size="10.5" fill="#9E3B32" font-family="monospace">合计 9665 拍 ≈ 96.7 µs（实测）</text>
+      <text x="36" y="304" font-size="10" fill="#9A9484">慢是故意的——它就是分母</text>
+
+      <!-- panel 2 -->
+      <rect x="299" y="16" width="262" height="298" fill="#FFFFFF" stroke="#CFDFEA"/>
+      <rect x="299" y="16" width="262" height="30" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="313" y="36" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">varA · 8 lane 点积</text>
+      <text x="527" y="36" font-size="10" fill="#7FA6BE">200 MHz</text>
+
+      <rect x="317" y="60" width="226" height="34" fill="#FDFDFB" stroke="#E4E0D6"/>
+      <text x="329" y="81" font-size="11" fill="#45423B">装载 Q / K / V（同端口契约）</text>
+      <line x1="430" y1="94" x2="430" y2="108" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="317" y="110" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="329" y="128" font-size="11" font-weight="600" fill="#1B1A17">S = Q·Kᵀ</text>
+      <text x="329" y="143" font-size="10.5" fill="#25506C" font-family="monospace">8 lane 并行乘 ＋ 3 级加法树（理想 2 拍）</text>
+      <line x1="430" y1="150" x2="430" y2="164" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="317" y="166" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="329" y="184" font-size="11" font-weight="600" fill="#1B1A17">Softmax（行）</text>
+      <text x="329" y="199" font-size="10.5" fill="#25506C" font-family="monospace">复用同一套 core 单元（未改数值）</text>
+      <line x1="430" y1="206" x2="430" y2="220" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="317" y="222" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="329" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
+      <text x="329" y="255" font-size="10.5" fill="#25506C" font-family="monospace">同一 8 lane 阵列复用 ｜ 零元素门控</text>
+      <text x="317" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">待测</tspan>：8 lane → 理想 1/8</text>
+      <text x="317" y="304" font-size="10" fill="#9A9484">隔离变量：并行度（数值格式不变）</text>
+
+      <!-- panel 3 -->
+      <rect x="580" y="16" width="262" height="298" fill="#FFFFFF" stroke="#CBE2D6"/>
+      <rect x="580" y="16" width="262" height="30" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="594" y="36" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">varB · 脉动阵列</text>
+      <text x="808" y="36" font-size="10" fill="#7FA394">200 MHz</text>
+
+      <rect x="598" y="60" width="226" height="34" fill="#FDFDFB" stroke="#E4E0D6"/>
+      <text x="610" y="81" font-size="11" fill="#45423B">装载 Q / K / V（同端口契约）</text>
+      <line x1="711" y1="94" x2="711" y2="108" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="598" y="110" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="610" y="128" font-size="11" font-weight="600" fill="#1B1A17">16×16 脉动阵列</text>
+      <text x="610" y="143" font-size="10.5" fill="#22604A" font-family="monospace">Q 驻留，K 逐列流入 ｜ 乘加就地累积</text>
+      <line x1="711" y1="150" x2="711" y2="164" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="598" y="166" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="610" y="184" font-size="11" font-weight="600" fill="#1B1A17">在线 Softmax</text>
+      <text x="610" y="199" font-size="10.5" fill="#22604A" font-family="monospace">max / sum 随行推进，省掉整行缓冲</text>
+      <line x1="711" y1="206" x2="711" y2="220" stroke="#9A9484" marker-end="url(#a2)"/>
+
+      <rect x="598" y="222" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="610" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
+      <text x="610" y="255" font-size="10.5" fill="#22604A" font-family="monospace">阵列转置复用，P 边出边乘</text>
+      <text x="598" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">待测</tspan>：靠数据复用压缩调度开销</text>
+      <text x="598" y="304" font-size="10" fill="#9A9484">隔离变量：数据流形态（并行度同为 16）</text>
+    </svg>
+    <figcaption><b>图 2</b>　三方案的数据流与并行度。ref 的周期数是实测值；varA / varB 的周期与面积
+      待综合与回归完成后回填 <code>results/metrics.csv</code>，不在页面上预先写数字。</figcaption>
+  </figure>
+
+  <h3>参考实现这条“尺子”怎么来的</h3>
+  <p>题面的说法是“每题使用统一固定的参考实现，学生将其适配到自选工艺”。我们拿不到那份实现时，
+  做法是<b>自己写一个结构最朴素的版本，并把它冻住</b>——它的价值不在性能，而在“未优化的定义”。</p>
+  <ul>
+    <li><b>结构朴素到底</b>：一条 16 深 MAC、逐元素串行、没有并行、没有流水线重排。</li>
+    <li><b>数值贴近题面</b>：qb16/qf13，几乎是 FP16 的定点等价物，代表“没做量化优化”的基线。</li>
+    <li><b>三条可借的近似</b>：LUT 化 exp、每行一次倒数、P·V 的零元素门控。这三条来自
+      <code>reference/</code> 里两篇 ISSCC 论文，但它们属于“算法层近似”，与结构优化正交，
+      所以 ref 里也允许出现——这样 ref→varA 的差值才干净地只反映结构。</li>
+  </ul>
+
+  <div class="callout bad">
+    <span class="lbl">明确不借的部分</span>
+    <p>论文里的 BESA 近位宽乘法器（小值走近似、大值精确）在这里<b>用不了</b>。
+    “与自身软件模型逐位一致”意味着乘法一旦近似，累加结果就漂，逐位比对必然挂。
+    <b>近似只能出现在模型已经规定近似的地方（exp / 倒数 / 量化），MAC 必须精确。</b>
+    这不是保守，是判据决定的。</p>
+  </div>
+</section>
+
+<!-- ================= 04 ================= -->
+<section id="s04">
+  <h2 class="sec"><span class="num">04</span>数值契约：位宽是怎么定下来的</h2>
+  <p class="sub">题面只给两条误差上限，位宽是自己推出来的——推导过程就是 20 分理论分析的主体。</p>
+
+  <p>定点方案里最容易犯的错是“拍一个位宽，跑一遍看误差，不够就加两位”。这样做出来的数字没法解释，
+  也没法回答“为什么不用 8 bit”。我们的做法是<b>先建误差模型，再用扫描验证模型</b>，两者对上才选工作点。</p>
+
+  <h3>误差预算：为什么 Softmax 必须比输出精度高</h3>
+  <p>误差沿数据流只有一条需要小心：</p>
+  <pre><span class="c"># 量化 → 点积 → 指数 → 加权求和，每一段的放大关系</span>
+δ(Q,K) ──量化──▶ δS ──exp 的指数敏感──▶ δp/p ≈ δS ──加权求和──▶ δY</pre>
+  <p>关键在于 <code>δp/p ≈ δS</code>（以 nat 为单位）：Softmax 对 S 的<b>绝对误差</b>极其敏感，
+  因为 <code>exp</code> 把加性误差直接变成乘性误差。这决定了 <b>S 的定点分辨率必须远高于 Y 的分辨率</b>——
+  所以 S 和 p 都取 F=16，而最终输出中间值只需要 F=13。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>环节</th><th>格式</th><th class="c">小数位</th><th>表示范围</th><th class="num">分辨率</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>输入 Q/K/V</td><td>FP16</td><td class="c">—</td><td>±2（题面限定）</td><td class="num">—</td><td>IEEE 754 binary16</td></tr>
+      <tr><td>量化后 q/k/v</td><td><b>s10.7</b></td><td class="c">7</td><td>±4</td><td class="num">7.8e−3</td><td>留 1 bit 幅度余量，见下</td></tr>
+      <tr><td>QKᵀ 累加</td><td>整数</td><td class="c">—</td><td>±2²⁰</td><td class="num">1</td><td>22 bit，精确无截断</td></tr>
+      <tr><td>S = QKᵀ/4</td><td>s32.16</td><td class="c">16</td><td>±16（用 ±32 余量）</td><td class="num">1.5e−5</td><td>全局最高精度点</td></tr>
+      <tr><td>d = m − S</td><td>s32.16</td><td class="c">16</td><td>[0, 32]</td><td class="num">1.5e−5</td><td>行最大值移位，必非负</td></tr>
+      <tr><td>t = d·log₂e</td><td>s32.16</td><td class="c">16</td><td>[0, 46.2]</td><td class="num">1.5e−5</td><td>把 e 的底换成 2</td></tr>
+      <tr><td>e = 2^(−t)</td><td>s32.16</td><td class="c">16</td><td>[0, 1]</td><td class="num">1.5e−5</td><td>16 项 LUT + 线性插值</td></tr>
+      <tr><td>行和 T</td><td>整数</td><td class="c">—</td><td>[2¹⁶, 2²⁰]</td><td class="num">1</td><td>22 bit</td></tr>
+      <tr><td>倒数 R = 2⁴⁰/T</td><td>整数</td><td class="c">—</td><td>[2²⁰, 2²⁴]</td><td class="num">1</td><td>每行只做一次</td></tr>
+      <tr><td>p = e·R ≫ 24</td><td>s32.16</td><td class="c">16</td><td>[0, 1]</td><td class="num">1.5e−5</td><td>Σp ≈ 1</td></tr>
+      <tr><td>PV 累加</td><td>整数</td><td class="c">—</td><td>±2²⁸</td><td class="num">1</td><td>30 bit</td></tr>
+      <tr><td>y = P·V</td><td>s32.13</td><td class="c">13</td><td>±2</td><td class="num">1.2e−4</td><td>输出前的中间值</td></tr>
+      <tr><td>输出</td><td>FP16</td><td class="c">—</td><td>±2</td><td class="num">—</td><td>RNE 舍入</td></tr>
+    </tbody>
+    <caption>唯一真源：<code>hw/model/attn_model.h</code>（C 模型）与 <code>hw/rtl/common/attn_pkg.sv</code>（RTL）。
+      两处的常量必须逐字对应，任一处改动都要重跑 <code>make vec</code>。</caption>
+  </table>
+  </div>
+
+  <h3>位宽扫描：把“为什么不是 8 bit”画出来</h3>
+  <p>固定 <code>qb=16</code>（避免饱和干扰），只扫小数位 <code>qf</code>，每类 200 帧取最大单帧误差。
+  曲线在 <code>qf ≤ 9</code> 段严格随位宽 2 倍下降（自洽），<code>qf ≥ 10</code> 段压到 FP16 输出舍入的地板。</p>
+
+  <figure>
+    <svg viewBox="0 0 860 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="位宽扫描：qf 与最坏 RMSE 的关系">
+      <!-- axes -->
+      <line x1="90" y1="300" x2="800" y2="300" stroke="#D2CCBC"/>
+      <line x1="90" y1="40" x2="90" y2="300" stroke="#D2CCBC"/>
+
+      <!-- y grid: log scale 1e-4 .. 1e-1 -->
+      <g font-family="monospace" font-size="10" fill="#A9A395">
+        <line x1="90" y1="300" x2="800" y2="300" stroke="#EFEEE7"/>
+        <text x="80" y="304" text-anchor="end">1e−4</text>
+        <line x1="90" y1="235" x2="800" y2="235" stroke="#EFEEE7"/>
+        <text x="80" y="239" text-anchor="end">1e−3</text>
+        <line x1="90" y1="170" x2="800" y2="170" stroke="#EFEEE7"/>
+        <text x="80" y="174" text-anchor="end">1e−2</text>
+        <line x1="90" y1="105" x2="800" y2="105" stroke="#EFEEE7"/>
+        <text x="80" y="109" text-anchor="end">1e−1</text>
+        <line x1="90" y1="40" x2="800" y2="40" stroke="#EFEEE7"/>
+        <text x="80" y="44" text-anchor="end">1e0</text>
+      </g>
+      <text x="46" y="170" font-size="11" fill="#78736A" transform="rotate(-90 46 170)" text-anchor="middle">最坏单帧 RMSE（对数轴）</text>
+
+      <!-- verdict bands：0.06 判据线在 log 轴上的位置 y = 300 − 65·(lg0.06 + 4) ≈ 119 -->
+      <rect x="90" y="40" width="710" height="79" fill="#FBEBE8" opacity="0.6"/>
+      <text x="790" y="58" font-size="10.5" fill="#9E3B32" text-anchor="end">超限区　RMSE &gt; 0.06</text>
+      <rect x="90" y="119" width="710" height="181" fill="#E9F3EE" opacity="0.45"/>
+      <text x="790" y="292" font-size="10.5" fill="#2C7A5B" text-anchor="end">达标区　RMSE ≤ 0.06</text>
+      <line x1="90" y1="119" x2="800" y2="119" stroke="#9E3B32" stroke-width="1.3" stroke-dasharray="5 3"/>
+      <text x="96" y="132" font-size="10" fill="#9E3B32" font-family="monospace">0.06 判据线</text>
+
+      <!-- x ticks qf=5..13 -->
+      <g font-family="monospace" font-size="10" fill="#78736A" text-anchor="middle">
+        <text x="140" y="318">5</text><text x="220" y="318">6</text><text x="300" y="318">7</text>
+        <text x="380" y="318">8</text><text x="460" y="318">9</text><text x="540" y="318">10</text>
+        <text x="620" y="318">11</text><text x="700" y="318">12</text><text x="780" y="318">13</text>
+      </g>
+      <text x="445" y="340" font-size="11" fill="#78736A" text-anchor="middle">小数位 qf（qb 固定 16，等效位宽 = qf + 3）</text>
+
+      <!-- data: worst rmse → y = 300 − 65·(log10(v) + 4) -->
+      <polyline points="140,151.2 220,168.3 300,195.9 380,212.7 460,237.9 540,269.0 620,280.4"
+                fill="none" stroke="#2F5D7C" stroke-width="2.2"/>
+      <g fill="#2F5D7C">
+        <circle cx="140" cy="151.2" r="3.4"/><circle cx="220" cy="168.3" r="3.4"/>
+        <circle cx="300" cy="195.9" r="3.4"/><circle cx="380" cy="212.7" r="3.4"/>
+        <circle cx="460" cy="237.9" r="3.4"/><circle cx="540" cy="269.0" r="3.4"/>
+        <circle cx="620" cy="280.4" r="3.4"/>
+      </g>
+
+      <!-- chosen point -->
+      <circle cx="300" cy="195.9" r="9" fill="none" stroke="#9C6E16" stroke-width="1.6"/>
+      <path d="M312 195.9 L600 195.9" fill="none" stroke="#C79A3C" stroke-width="1" stroke-dasharray="3 3"/>
+      <rect x="604" y="172" width="192" height="48" fill="#FBF3E1" stroke="#EBD9AF"/>
+      <text x="614" y="191" font-size="11" font-weight="600" fill="#7A5510">选定工作点 qf=7（10 bit）</text>
+      <text x="614" y="209" font-size="10.5" fill="#7A5510" font-family="monospace">RMSE 0.0040 ｜ 余量 15×</text>
+
+      <!-- 8 bit: nominal ok, degraded ×5 fails -->
+      <circle cx="140" cy="151.2" r="9" fill="none" stroke="#9E3B32" stroke-width="1.4" stroke-dasharray="3 2"/>
+      <line x1="140" y1="151.2" x2="140" y2="105.6" stroke="#9E3B32" stroke-width="1" stroke-dasharray="2 2"/>
+      <circle cx="140" cy="105.6" r="4.2" fill="#FBEBE8" stroke="#9E3B32" stroke-width="1.4"/>
+      <text x="156" y="100" font-size="10.5" fill="#9E3B32" font-family="monospace">退化 ×5 → 0.098（超限）</text>
+      <path d="M140 151.2 V226 H150" fill="none" stroke="#C0A3A0" stroke-width="0.9" stroke-dasharray="2 2"/>
+      <text x="154" y="230" font-size="10.5" fill="#9E3B32" font-family="monospace">8 bit 标称 0.0195（qf=5）</text>
+
+      <!-- floor annotation -->
+      <line x1="640" y1="283" x2="800" y2="283" stroke="#A9A395" stroke-width="1" stroke-dasharray="2 3"/>
+      <text x="800" y="276" font-size="10" fill="#78736A" text-anchor="end">FP16 输出舍入地板 ≈ 2e−4</text>
+    </svg>
+    <figcaption><b>图 3</b>　位宽-精度扫描（<code>results/width_sweep.csv</code>，seed 20260101，每类 200 帧）。
+      阴影区是题面的 0.06 判据线。<b>曲线在低精度段每 bit 精确 2 倍</b>，说明误差模型与实测一致；
+      高精度段压平，说明此时瓶颈已换成 FP16 输出舍入——继续加位宽没有收益。</figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="lbl">安全系数：随机相位假设不总成立</span>
+    <p>上图的数字是“随机相位”假设下的。但存在一类<b>合法输入</b>会让误差相干叠加：若 K 的各行近似平行
+    （同一符号向量、仅整行幅度不同），16 个乘积的量化误差会同号累加，而不是按 √16 平均。
+    实测这种退化输入下误差放大 <b>3～5 倍</b>。按 5 倍预留后：8 bit → 0.098（超限），
+    <b>10 bit → 0.020（3 倍余量）</b>，12 bit → 0.0045（13 倍余量）。
+    这就是排除 8 bit 的真实理由——不是标称超标，而是安全垫不够厚。</p>
+  </div>
+
+  <h3>三个关键取舍</h3>
+
+  <h4>① 为什么 QF = QB − 3：把范围做到 ±4 而不是刚好 ±2</h4>
+  <p>题面允许输入 [−2, 2]。若把范围压到刚好 ±2，10 bit 就得用 QF=8，此时 <code>+2.0</code>
+  恰好落在 2⁹−1 与 2⁹ 的交界上，<b>会饱和</b>；而“规定范围的正负极值”正是六类必测向量之一，专门打饱和。
+  留 1 bit 幅度余量后范围是 ±4，代价是有效位数少约 1.3 bit，收益是<b>任何合法输入永不饱和</b>。</p>
+  <p>这个取舍是可量化的：8 bit + QF=6 能多 1 bit 分辨率，但 <code>+2.0</code> 会削到 1.9844
+  （误差 1.6e−2）。在极值用例里这是<b>系统性偏差</b>；而少 1 bit 分辨率只是均匀白噪声，
+  会被 Softmax 归一化部分吸收。<b>选留余量。</b></p>
+
+  <h4>② 为什么 Softmax 走 2 的幂分解，而不是查 exp 大表</h4>
+  <p>要算 <code>e^(−d)</code>，d ∈ [0, 32]。直接建表要覆盖 32 个 nat 的宽度：按 2⁻⁷ 步长 → 4096 项（不可接受）；
+  按 2⁻³ 步长 → 256 项，但 e 的曲率在整个区间变化剧烈，插值误差仍然大。改成 2 的底：</p>
+  <pre>e^(−d) = 2^(−d·log₂e) = 2^(−n−f) = 2^(−n) · 2^(−f),   n ∈ ℤ≥0, f ∈ [0,1)</pre>
+  <ul>
+    <li><b>n 的部分是一次桶形移位</b>，零成本；</li>
+    <li><b>f 的部分只需覆盖 [0,1) 一个区间</b>，2⁻¹ 在该区间内曲率温和，<b>16 项 + 线性插值</b>就够。</li>
+  </ul>
+  <p>实测 16 项 LUT 的插值最大相对误差 <b>6.9e−5</b>，远小于量化误差，等于白送。
+  另外 <code>n ≥ 16</code> 直接置 0：此时 2⁻¹⁶ 已低于 p 的一个 LSB，置零不损失可表示信息，
+  还省掉移位器位宽——这同时保证 <b>d 再大也不会溢出，所以 exp 里不需要饱和保护</b>。</p>
+
+  <h4>③ 为什么归一化用「一次倒数 + 16 次乘法」</h4>
+  <p>朴素做法是 <code>p_i = e_i / T</code>，每行 16 次除法。改成
+  <code>R = round(2⁴⁰ / T)</code>（每行 1 次），再 <code>p_i = (e_i·R + 2²³) ≫ 24</code>：
+  除法器从 16 个降到 1 个，其余是乘法器（本来就有）。2⁴⁰ 的分子保证 R 的相对误差 &lt; 5e−7，
+  对 16 位精度的 p 完全无感。实测每行 Σp 相对 65536 的偏差 ≤ 5 LSB。</p>
+
+  <div class="callout key">
+    <span class="lbl">刻意不做的优化</span>
+    <p>整套流水线只有<b>三次</b>尺度转换，全部是 2 的幂或常量乘，<b>没有 per-tensor / per-row 动态缩放</b>。
+    理由：输入被题面限定在 [−2, 2]，动态范围是已知常数，动态缩放省不出位宽，反而引入额外控制与精度损失。
+    这一条要写进报告的“自主设计”里——它是主动放弃，不是遗漏。</p>
+  </div>
+
+  <h3>位宽换来的面积</h3>
+  <p>MAC 阵列是设计的面积主体，而它的面积<b>近似随 QB² 缩放</b>。这就是效率分的主要来源：</p>
+  <figure>
+    <svg viewBox="0 0 860 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="不同位宽下乘法器面积占比">
+      <g font-family="monospace" font-size="11.5">
+        <!-- rows -->
+        <text x="20" y="42" fill="#45423B">16 bit (ref)</text>
+        <rect x="150" y="28" width="600" height="22" fill="#F5F4EF" stroke="#D2CCBC"/>
+        <rect x="150" y="28" width="600" height="22" fill="#E4E0D6" stroke="#C9C3B2"/>
+        <text x="762" y="44" fill="#45423B">100%</text>
+
+        <text x="20" y="82" fill="#45423B">12 bit</text>
+        <rect x="150" y="68" width="600" height="22" fill="#F5F4EF" stroke="#D2CCBC"/>
+        <rect x="150" y="68" width="336" height="22" fill="#CFDFEA" stroke="#B9CFDD"/>
+        <text x="498" y="84" fill="#25506C">56%</text>
+
+        <text x="20" y="122" fill="#1B1A17" font-weight="700">10 bit (选定)</text>
+        <rect x="150" y="108" width="600" height="22" fill="#F5F4EF" stroke="#D2CCBC"/>
+        <rect x="150" y="108" width="234" height="22" fill="#3F7CA3" stroke="#2F5D7C"/>
+        <text x="396" y="124" fill="#1B1A17" font-weight="700">39%</text>
+
+        <text x="20" y="162" fill="#45423B">8 bit</text>
+        <rect x="150" y="148" width="600" height="22" fill="#F5F4EF" stroke="#D2CCBC"/>
+        <rect x="150" y="148" width="150" height="22" fill="#DCE8E0" stroke="#C2D5C8"/>
+        <text x="312" y="164" fill="#2C7A5B">25%</text>
+      </g>
+      <text x="150" y="192" font-size="10.5" fill="#78736A">相对 16 bit 方案的乘法器面积占比（QB² 近似缩放）；8 bit 因安全垫不足被排除</text>
+    </svg>
+    <figcaption><b>图 4</b>　位宽与面积的关系。<b>从 16 bit 降到 10 bit，阵列面积降到 39%</b>——
+      这就是 ref 与 varA 之间面积差的主要成分。</figcaption>
+  </figure>
+</section>
+
+<!-- ================= 05 ================= -->
+<section id="s05">
+  <h2 class="sec"><span class="num">05</span>仿真与验证环境</h2>
+  <p class="sub">一份 tb、三个 DUT、两条判据。仿真器只有一个：VCS。</p>
+
+  <p>验证占 30 分，而“验证充分”是个模糊词。我们的做法是把它拆成可机械判定的三件事：
+  <b>六类激励都跑过</b>、<b>输出与自己那份模型逐位相同</b>、<b>对 float64 的误差在两条线以内</b>。
+  前两条由脚本判、后一条由 tb 算，没有人工裁量空间。</p>
+
+  <h3>工具栈：三层分工</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>环节</th><th>在哪做</th><th>工具与版本</th><th>为什么在这里</th></tr></thead>
+    <tbody>
+      <tr><td>写代码 / 编辑</td><td>Windows（NAS 上的工程）</td><td>—</td><td>NAS 是唯一真源，git 在这里</td></tr>
+      <tr><td>仿真 / 波形</td><td>CentOS 7.9 虚拟机</td><td><b>VCS V-2023.12-SP2</b> ＋ Verdi</td><td>license 正常；Windows 上没有可用的 SV 仿真器</td></tr>
+      <tr><td>快速语法检查</td><td>同一台虚拟机</td><td>VCS 编译，1～2 s</td><td>比“本地装个 iverilog 再同步”还快</td></tr>
+      <tr><td>综合 / 功耗</td><td>同一台虚拟机</td><td><b>Genus 15.20-p004_1</b></td><td>VM 上已有，不需要另找 DC</td></tr>
+      <tr><td>黄金模型 / 向量</td><td>任意（gcc 即可）</td><td>C99，<code>-ffp-contract=off</code></td><td>跨平台逐字节可复现</td></tr>
+    </tbody>
+    <caption>VM 规格：8 vCPU / 16 GB，CentOS 7.9.2009。VCS 装在 <code>/root/synopsys_apps</code>，
+      Genus 在 <code>/opt/cadence/GENUS152</code>。</caption>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="lbl">两处必须记住的环境事实</span>
+    <p><b>① 冷启动有“预热税”</b>：开机后第一次 <code>vcs</code> 编译 40～138 s，之后热态只要 8.9 s；
+    进程内部是几千个 31 ms 的 <code>poll()</code> 空等，不是 CPU / DNS / license 问题。
+    所以开机先跑一次 <code>make flowtest</code> 预热，之后所有仿真是秒级。</p>
+    <p><b>② 不要在 <code>/mnt/hgfs</code> 上直接跑仿真</b>：hgfs 走 FUSE，写 <code>simv</code> 中间文件和
+    覆盖率数据库会慢一个数量级。<code>prepare.sh</code> 的作用就是先 <code>cp -a</code> 到本地盘再动手。</p>
+  </div>
+
+  <h3>一份 tb 驱动三个 DUT</h3>
+  <figure>
+    <svg viewBox="0 0 860 348" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="验证架构：一份 testbench 驱动三个 DUT">
+      <defs>
+        <marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 z" fill="#9A9484"/>
+        </marker>
+        <marker id="a4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 z" fill="#2F5D7C"/>
+        </marker>
+      </defs>
+
+      <!-- vectors -->
+      <rect x="20" y="28" width="204" height="78" fill="#FBF3E1" stroke="#EBD9AF"/>
+      <text x="34" y="48" font-size="11.5" font-weight="600" fill="#7A5510">测试向量（C 模型导出）</text>
+      <text x="34" y="66" font-size="10.5" fill="#7A5510" font-family="monospace">&lt;cat&gt;_&lt;i&gt;_qkv.hex</text>
+      <text x="34" y="82" font-size="10.5" fill="#7A5510" font-family="monospace">&lt;cat&gt;_&lt;i&gt;_exp_qb10qf7.hex</text>
+      <text x="34" y="98" font-size="10.5" fill="#7A5510" font-family="monospace">&lt;cat&gt;_&lt;i&gt;_ref.hex</text>
+      <line x1="226" y1="67" x2="258" y2="67" stroke="#9A9484" stroke-width="1.2" marker-end="url(#a3)"/>
+
+      <!-- tb -->
+      <rect x="260" y="28" width="378" height="78" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="274" y="48" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">tb/sys/tb_attn.sv　（只写一份）</text>
+      <text x="274" y="66" font-size="10.5" fill="#25506C">驱动 · 采样 · scoreboard · covergroup</text>
+      <text x="274" y="84" font-size="10.5" fill="#25506C">判据：位精确 ＋ RMSE/MaxAE ＋ 有限性</text>
+      <text x="274" y="100" font-size="10" fill="#5E7E93" font-family="monospace">+define+DUT=top_ref | top_varA | top_varB</text>
+
+      <!-- define chip -->
+      <rect x="650" y="40" width="190" height="54" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <text x="664" y="58" font-size="10.5" fill="#78736A">编译期注入被测顶层</text>
+      <text x="664" y="76" font-size="10" fill="#A9A395">换 DUT 不改 tb 一个字</text>
+      <text x="664" y="90" font-size="10" fill="#A9A395">→ 对比条件天然成立</text>
+
+      <!-- fan -->
+      <path d="M440 106 L440 132" stroke="#9A9484" stroke-width="1.2"/>
+      <path d="M176 132 L704 132" stroke="#9A9484" stroke-width="1.2"/>
+      <line x1="176" y1="132" x2="176" y2="152" stroke="#9A9484" stroke-width="1.2" marker-end="url(#a3)"/>
+      <line x1="440" y1="132" x2="440" y2="152" stroke="#9A9484" stroke-width="1.2" marker-end="url(#a3)"/>
+      <line x1="704" y1="132" x2="704" y2="152" stroke="#9A9484" stroke-width="1.2" marker-end="url(#a3)"/>
+
+      <!-- DUTs -->
+      <rect x="56" y="154" width="240" height="54" fill="#F5F4EF" stroke="#D2CCBC"/>
+      <text x="70" y="175" font-size="12" font-weight="600" fill="#45423B" font-family="monospace">top_ref</text>
+      <text x="70" y="194" font-size="10.5" fill="#78736A">串行 · 100 MHz · 9665 拍</text>
+
+      <rect x="320" y="154" width="240" height="54" fill="#EAF1F6" stroke="#CFDFEA"/>
+      <text x="334" y="175" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">top_varA</text>
+      <text x="334" y="194" font-size="10.5" fill="#5E7E93">8 lane · 200 MHz</text>
+
+      <rect x="584" y="154" width="240" height="54" fill="#E9F3EE" stroke="#CBE2D6"/>
+      <text x="598" y="175" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">top_varB</text>
+      <text x="598" y="194" font-size="10.5" fill="#5E8A76">脉动阵列 · 200 MHz</text>
+
+      <!-- core -->
+      <rect x="56" y="228" width="768" height="44" fill="#FFFFFF" stroke="#D2CCBC"/>
+      <text x="70" y="247" font-size="11.5" font-weight="600" fill="#1B1A17">rtl/core/ · 共享数据通路</text>
+      <text x="70" y="263" font-size="10.5" fill="#6B675E" font-family="monospace">fp16_quant.sv ｜ exp2_unit.sv ｜ recip_unit.sv ｜ fix2fp16.sv ｜ attn_math.svh</text>
+      <text x="700" y="263" font-size="10" fill="#A9A395">改一次三套同时变</text>
+
+      <!-- judge -->
+      <rect x="56" y="288" width="768" height="46" fill="#FDFDFB" stroke="#E4E0D6" stroke-dasharray="4 3"/>
+      <text x="70" y="306" font-size="11" font-weight="600" fill="#45423B">PASS 条件（三条同时成立）</text>
+      <text x="70" y="324" font-size="10.5" fill="#6B675E" font-family="monospace">逐位一致 0 失配　＋　RMSE ≤ 0.06 且 MaxAE ≤ 0.20　＋　输出全为有限 FP16</text>
+      <line x1="440" y1="272" x2="440" y2="286" stroke="#9A9484" stroke-width="1.1" marker-end="url(#a3)"/>
+    </svg>
+    <figcaption><b>图 5</b>　验证架构。三个顶层共用 <code>attn_ports.svh</code> 的端口宏，所以同一份 tb
+      能不加修改地驱动三套实现；差异只出现在各方案 <code>filelist.f</code> 的第 3 段。</figcaption>
+  </figure>
+
+  <h3>两条判据，缺一不可</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>判据</th><th>含义</th><th>阈值</th><th>只过这一条意味着</th></tr></thead>
+    <tbody>
+      <tr><td><b>逐位一致</b></td><td>输出 FP16 与 C 定点模型 bit-exact</td><td class="num">0 个元素不同</td><td>RTL 忠实于一个<b>错误的模型</b></td></tr>
+      <tr><td><b>精度达标</b></td><td>对 float64 参考的 RMSE / MaxAE</td><td class="num">≤ 0.06 / ≤ 0.20</td><td>模型和 RTL <b>不是一回事</b></td></tr>
+      <tr><td>有限值</td><td>输出不含 inf / NaN</td><td class="num">0 个</td><td>—</td></tr>
+    </tbody>
+    <caption>两条都过，才说明“这个 RTL 实现了那个模型，而那个模型精度够用”。这正是题面把两条并列写的原因。</caption>
+  </table>
+  </div>
+
+  <h3>向量契约：为什么必须由 C 模型导出</h3>
+  <p>“逐位一致的软件模型”和“测试向量”必须出自<b>同一份代码</b>。只要多一条重新实现的路径，
+  就多一个不一致的来源——而那正是这项要被扣分的地方。所以 <code>dumpvec</code> 直接调
+  <code>attn_fixed()</code> 导出期望值，不另写 Python 重算一遍。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>文件</th><th>内容</th><th>共享性</th></tr></thead>
+    <tbody>
+      <tr><td><code>&lt;cat&gt;_&lt;i&gt;_qkv.hex</code></td><td>768 个 16 bit：Q[0..255] K[256..511] V[512..767]，行主序</td><td>与格式无关，三方案共享</td></tr>
+      <tr><td><code>&lt;cat&gt;_&lt;i&gt;_exp_&lt;cfg&gt;.hex</code></td><td>256 个 16 bit：该格式下<b>逐位一致</b>的期望输出（FP16 位模式）</td><td><b>必须带格式标签</b></td></tr>
+      <tr><td><code>&lt;cat&gt;_&lt;i&gt;_ref.hex</code></td><td>256 个 64 bit：float64 参考值，tb 用 <code>$bitstoreal</code> 还原后算 RMSE</td><td>与格式无关</td></tr>
+      <tr><td><code>manifest_&lt;cfg&gt;.txt</code></td><td>seed、定点配置、任务清单、每行 Σp 偏差</td><td>按格式分文件</td></tr>
+    </tbody>
+    <caption><code>&lt;cfg&gt;</code> = <code>qb10qf7</code> 这类标签。不带标签的后果很具体：
+      后跑的方案会静默覆盖前一个，tb 拿 varA 的输出去比 ref 的期望，报一堆看着像 RTL bug 的失配。</caption>
+  </table>
+  </div>
+
+  <p>复现的硬要求有两条，都是为了“同一 seed 必然产出同一串字节”：<code>dumpvec</code> 用 <code>"wb"</code>
+  写文件（否则 Windows CRT 会把 <code>\n</code> 翻成 CRLF）；<code>attn_ref</code> 不调用 libm 的
+  <code>exp()</code>（否则 Linux gcc 4.8.5 与 Windows gcc 15.2 差 1～2 ULP）。
+  <b>实测：两个平台生成的 37 个受跟踪文件逐字节相同。</b></p>
+
+  <h3>六类激励怎么落到 tb 里</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>类别</th><th>向量构造</th><th>tb 侧额外做的事</th><th class="c">实测</th></tr></thead>
+    <tbody>
+      <tr><td>随机</td><td>均匀随机 ∈ [−2, 2]</td><td>—</td><td class="c"><span class="tag ok">PASS</span></td></tr>
+      <tr><td>全零</td><td>全零；奇数号只让 V 非零</td><td>查 0/0 不产生 NaN</td><td class="c"><span class="tag ok">PASS</span></td></tr>
+      <tr><td>正负极值</td><td>{−2,−1,0,1,2}，强制第 0 行全 +2、第 1 行全 −2</td><td>打饱和与符号对称</td><td class="c"><span class="tag ok">PASS</span></td></tr>
+      <tr><td>相消</td><td>Hadamard 正交 / 近并行 K 行交替</td><td>打累加器与 softmax 分辨率</td><td class="c"><span class="tag ok">PASS</span></td></tr>
+      <tr><td>复位</td><td>随机任务</td><td><b>复位后重跑，两次输出必须逐位相同</b></td><td class="c"><span class="tag ok">PASS</span></td></tr>
+      <tr><td>连续任务</td><td>随机任务，<b>不复位</b>连跑</td><td>与干净状态的期望值比对，查状态泄漏</td><td class="c"><span class="tag ok">PASS</span></td></tr>
+    </tbody>
+    <caption>以上为 ref 方案（qb16/qf13，seed 20260101，每类 2 个任务）的实测结果，共 12 任务、0 失配。
+      varA / varB 待 RTL 完成后按同一套向量重跑。</caption>
+  </table>
+  </div>
+
+  <div class="callout">
+    <span class="lbl">覆盖率：能采，但出不了 urg 报告</span>
+    <p><code>vcs -cm line+cond+fsm+tgl+branch</code> 编译通过、<code>simv</code> 也能产生
+    <code>simv.vdb</code>，但 <code>urg -dir simv.vdb</code> 崩在 <code>covdb_get_license()</code>——
+    这台机器的 license 不含 URG 特性。所以 <code>build.sh</code> <b>默认不开 <code>-cm</code></b>（采了也没法出报告，只拖慢仿真）。
+    报告里的证据链改为：<b>六类回归表（每类一行 + 状态）＋ <code>runs/&lt;TAG&gt;/sim_&lt;cat&gt;.log</code></b>。
+    题面要的是“六类激励都覆盖到”，不是行覆盖率百分比——这样反而更贴题，也不依赖 license。</p>
+  </div>
+</section>
+
+<!-- ================= 06 ================= -->
+<section id="s06">
+  <h2 class="sec"><span class="num">06</span>PDK 与综合环境</h2>
+  <p class="sub">45 nm 通用库 + Genus 15.2，三个角齐全；两个必须知道的坑都写进了流程的自动检查。</p>
+
+  <p>题面允许 SKY130、GF180MCU 或学校可用的其他工艺。我们选了 VM 上工具自带的两套 45 nm 库之一，
+  理由是<b>角和工具链都在同一台机器上、且已被脚本验证过</b>——40 分的效率项依赖“成对测量”，
+  换工艺的迁移成本会直接吃掉可用的迭代次数。</p>
+
+  <h3>库的选择：只有两套 45 nm 可用</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>库</th><th class="c">工艺角</th><th class="num">单元数</th><th class="c">面积字段</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td><b>GPDK045</b><br><span style="font-size:11.5px;color:#78736A">gsclib045 v3.5 的再表征版，随 Innovus 发布</span></td>
+          <td class="c"><b>tt / ff / ss 三角齐全</b></td><td class="num">477</td><td class="c">全为 0.0</td>
+          <td><span class="tag ok">选用</span> 报告里“工艺角”一栏才有内容可写</td></tr>
+      <tr><td>gsclib045_v3.5<br><span style="font-size:11.5px;color:#78736A">同一套单元的原始版</span></td>
+          <td class="c">只有 slow</td><td class="num">486</td><td class="c">全为 0.0</td>
+          <td>带 SRAM macro 库，但缺角，不选</td></tr>
+    </tbody>
+    <caption>两套库<b>单元名完全相同</b>（GPDK045 就是 gsclib045 的再表征），所以只能二选一装进流程，
+      不能混用——混用的表现是“标签写 tt、实际加载了 ss 的库”，数字错了但看不出来。</caption>
+  </table>
+  </div>
+
+  <h3>三个角与真实电压</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>用途</th><th>库文件</th><th class="num">process</th><th class="num">voltage</th><th class="num">temp</th><th>PVT 标签</th></tr></thead>
+    <tbody>
+      <tr><td>典型 / 签核基准</td><td><code>typical.lib</code></td><td class="num">1.0</td><td class="num"><b>1.20 V</b></td><td class="num">25 °C</td><td><code>TT_25C_1V20</code></td></tr>
+      <tr><td>最快（查 hold 与短路功耗）</td><td><code>fast.lib</code></td><td class="num">1.0</td><td class="num"><b>1.32 V</b></td><td class="num">0 °C</td><td><code>FF_0C_1V32</code></td></tr>
+      <tr><td>最慢（查 setup）</td><td><code>slow.lib</code></td><td class="num">1.0</td><td class="num"><b>1.08 V</b></td><td class="num">125 °C</td><td><code>SS_125C_1V08</code></td></tr>
+    </tbody>
+    <caption>PVT 标签由 <code>CORNER</code> 从 <code>config/pdk.mk</code> 派生，<b>标签与实际加载的库文件必然一致</b>——
+      这是把“写错标签”变成不可能，而不是靠人记得改两处。</caption>
+  </table>
+  </div>
+
+  <div class="callout bad">
+    <span class="lbl">坑一 · 库里的面积全是 0.0</span>
+    <p>演示库被剥掉了面积字段，Genus 读库时会刷一屏
+    <code>Warning : Libcell has no area attribute. Defaulting to 0 area. [LBR-43]</code>。
+    只读 <code>.lib</code> 的话 <code>report_area</code> 给出 <b>0 µm²</b>——而 0 会一路混进报告表 2，
+    表现为“面积改善了无穷倍”。面积的真实来源是 <b>LEF</b>（<code>gsclib045.lef</code> 里 487 个 MACRO
+    都有 <code>SIZE W BY 1.71</code>）。所以流程强制 <code>read_physical -lef</code>，
+    并在解析后体检：<b>面积解析不出来或等于 0 就直接失败退出</b>，不允许生成一个“看起来跑完了”的 0 面积结果。</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="lbl">坑二 · 电压不是 0.9 V</span>
+    <p>题面模板里的 <code>tt_25C_0.90V</code> 只是个占位符。实测这个库的典型角是 <b>1.20 V</b>。
+    动态功耗 ∝ V²，按 0.9 V 去报而库是 1.2 V，功耗数字整体会差约 <b>78%</b>。
+    <code>variants.mk</code> 里原来的占位符已经改掉，现在 PVT 标签只从 <code>pdk.mk</code> 派生。</p>
+  </div>
+
+  <h3>综合约束：这些是实验条件，不是调参</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>约束</th><th>取值</th><th>为什么是这个值</th></tr></thead>
+    <tbody>
+      <tr><td>时钟</td><td><code>clk</code>，周期 = 1000/CLOCK ns<br>ref 100 MHz · varA/varB 200 MHz</td><td>频率是变量，从 <code>config/variants.mk</code> 读，不在脚本里写死</td></tr>
+      <tr><td>时钟不确定性</td><td>5% 周期</td><td>综合阶段没有时钟树，用固定比例吸收 jitter ＋ 偏斜</td></tr>
+      <tr><td>输入驱动单元</td><td><code>BUFX4</code></td><td><b>不用 ideal 驱动</b>：ideal 给 0 输入转换时间，路径延迟偏乐观，还会把三方案之间的差异抹平</td></tr>
+      <tr><td>输入转换时间</td><td>0.05 ns</td><td>与 BUFX4 驱动量级匹配</td></tr>
+      <tr><td>输出负载</td><td>0.016 pF</td><td>≈ 一个扇出 2 的门 ＋ 一小段线；综合阶段无布线信息，只能声明并固定</td></tr>
+      <tr><td>I/O 延迟</td><td>各 25% 周期</td><td>粗略反映“外面还有一级寄存器”，留一半周期给组合逻辑</td></tr>
+      <tr><td><code>rst_n</code></td><td><code>set_false_path</code></td><td>异步复位，不做时序检查，否则会被当成跨时钟路径</td></tr>
+      <tr><td>活动率</td><td>toggle 0.1 / static 0.5</td><td>功耗必须建立在明确假设上，否则两次的 mW 不可比</td></tr>
+      <tr><td>时钟门控</td><td>显式禁止，事后数 <code>*ICG*</code></td><td>三个方案若一个插了 ICG、一个没插，面积差里就混进了与算法无关的变量</td></tr>
+    </tbody>
+    <caption>不可协商：以上所有项在 ref / varA / varB 之间必须逐字相同。共用的校验指令是
+      <code>make pdkcheck</code>——它打印库、角、约束，缺项直接报错。</caption>
+  </table>
+  </div>
+
+  <h3>三个数字的统计边界</h3>
+  <p>报告里每个数字后面都要能接上这句边界说明。这是“报告与复现”那 10 分的实际内容，
+  也是被追问时唯一能站住的部分。</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>指标</th><th>怎么来的</th><th>边界（写进报告）</th></tr></thead>
+    <tbody>
+      <tr><td><b>面积 A</b> (µm²)</td><td><code>report_area</code> 的 Total area，单元面积取自 LEF</td><td>综合后网表的<b>标准单元面积</b>；不含布线开销、不含时钟树、不含 IO/pad、不含 SRAM 宏（本设计未用宏）</td></tr>
+      <tr><td><b>时延 D</b> (µs)</td><td>仿真测得的 <code>lat_max</code>（周期数）÷ 频率 (MHz)</td><td>从 <code>start</code> 到最后一个 <code>o_vld</code> 输出，<b>含格式转换、运算、存储、控制全流程</b>；不是单条路径延迟</td></tr>
+      <tr><td><b>功率 P</b> (mW)</td><td><code>report_power</code>，活动率固定 toggle 0.1 / static 0.5</td><td><b>静态估计</b>，不是仿真功耗（没有 VCD 反标）；绝对值仅供同条件比较</td></tr>
+      <tr><td><b>能耗 E</b> (nJ)</td><td>P (mW) × D (µs)</td><td>量纲正好是 nJ；这是“一次完整任务”的能耗，不是峰值功耗</td></tr>
+      <tr><td>频率 (MHz)</td><td>综合时的时钟约束目标值</td><td><b>不等于可达频率</b>，见下</td></tr>
+    </tbody>
+    <caption>面积 / 时序 / 功耗三项必须在<b>同一次</b> <code>syn_map/syn_opt</code> 之后取：
+      VM 上没有 PrimeTime / PowerArtist，好处是三者天然自洽（同一份网表），代价是没有独立的 sign-off 工具复核。
+      报告里必须写明这个口径，不能把综合估计说成签核结果。</caption>
+  </table>
+  </div>
+
+  <h3>频率怎么报：目标频率 ≠ 可达频率</h3>
+  <p>题面要填“运行频率”和“完整任务周期数”，而周期数乘频率才是时延。如果频率随便填一个好看的数，
+  时延和能耗就全是假的。所以分两步：先在统一的标称频率下综合，拿到 WNS；再由 slack 反推可达频率
+  <code>f_max ≈ 1/(T − WNS)</code>。这是<b>综合估计</b>，不含布线寄生。</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th class="c">WNS</th><th>含义</th><th>怎么做</th></tr></thead>
+    <tbody>
+      <tr><td class="c">&gt; 0</td><td>目标频率有富余</td><td>直接用目标频率报，同时报 <code>f_max</code> 说明天花板在哪</td></tr>
+      <tr><td class="c">≈ 0</td><td>正好卡住</td><td>最理想——说明频率是“设计出来的”而不是“捡来的”</td></tr>
+      <tr><td class="c">&lt; 0</td><td>目标频率达不到</td><td><b>不能直接报目标频率</b>：要么降频到 <code>f_max</code> 重跑，要么先修关键路径</td></tr>
+    </tbody>
+    <caption>表 2 的“频率”一列最稳妥的填法：<b>实际综合所用频率 ＋ 该频率下的 WNS</b>，
+      脚注写 <code>f_max ≈ xxx MHz（综合估计）</code>。这样无论怎么追问都有据可查。</caption>
+  </table>
+  </div>
+</section>
+
+<!-- ================= 07 ================= -->
+<section id="s07">
+  <h2 class="sec"><span class="num">07</span>工程结构与复现体系</h2>
+  <p class="sub">两条边界：hw/ 与 docs/ 分开，runs/ 与 results/ 分开。这两个边界决定了“可复现”是真是假。</p>
+
+  <pre><span class="h">Transform/</span>
+  <span class="h">docs/</span>           报告与理论（给人看的部分）
+    assignment/   题面、需求整理
+    theory/       01 数值格式设计 · 02 综合流程与工艺库
+    engineering/  版本与文件管理规范
+    figures/      图源
+    report/       报告源 ＋ 个人贡献说明
+  <span class="h">reference/</span>      两篇 ISSCC 参考论文（只读）
+  <span class="h">hw/</span>             硬件工程（给芯片看的部分）
+    <span class="c">model/</span>        C 黄金模型：float64 参考 ＋ bit-accurate 模型 ＋ 向量导出
+    <span class="c">rtl/</span>          common/（契约）· core/（共享通路）· ref|varA|varB/（编排）
+    <span class="c">tb/</span>           sys/（一份 tb）· unit/ · vectors/（进库）· cov/
+    <span class="c">flow/</span>         sim/ · synth/ · collect/ · power/   <span class="c">← 唯一流程入口</span>
+    <span class="c">config/</span>       variants.mk（方案）· pdk.mk（工艺与约束）
+    <span class="c">runs/</span>         每次运行产物（不进库，可丢）
+    <span class="c">results/</span>      提取出的指标 csv/md（必须进库）
+  <span class="h">deliverables/</span>   交付导出物（pdf / pptx / 压缩包，不进库）</pre>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>① hw/ 与 docs/ 分开</h4>
+      <p style="font-size:13.5px;margin-bottom:0"><code>hw/</code> 里只放能被工具直接消费的东西：源码、脚本、约束、可复现的指标。
+      <code>docs/</code> 里只放叙述与图。任何“代码里的魔法数字”必须在 <code>docs/</code> 能查到出处；
+      任何“报告里的数字”必须能顺着 TAG 追回 <code>hw/runs/</code>。</p>
+    </div>
+    <div class="card">
+      <h4>② runs/ 与 results/ 分开</h4>
+      <p style="font-size:13.5px;margin-bottom:0"><b>runs 是现场（乱、大、可丢），results 是结论（小、干净、必须进库）。</b>
+      把这两者混在一起，两周后你无法回答“这个数字是哪次跑出来的”。</p>
+    </div>
+  </div>
+
+  <h3>一个数字的可追溯链</h3>
+  <pre>报告表 2 的 A = 3124.6 µm²
+  -&gt; TAG = ref-full                <span class="c">// 表格里就写这个 TAG</span>
+       -&gt; runs/ref-full/INFO.txt    <span class="c">// commit · seed · clock · PVT · 工具版本</span>
+            -&gt; commit fb80f87
+                 -&gt; results/metrics.csv   <span class="c">// collect.py 扫描各 TAG 汇总</span>
+                      -&gt; make table       <span class="c">// 到表 2 / 表 3 的 markdown</span></pre>
+  <p><code>INFO.txt</code> 里会记“工作区是否干净”——脏工作区跑出来的数字不可追溯，这一条挡住了最常见的自欺。</p>
+
+  <h3>流程入口：只有 make</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>命令</th><th>作用</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td><code>make flowtest</code></td><td>自检流程本身（不需要 RTL，30 s）</td><td>开机预热顺便做</td></tr>
+      <tr><td><code>make vec SEED=… VARIANT=…</code></td><td>黄金模型导出测试向量</td><td>每个数值格式各生成一次</td></tr>
+      <tr><td><code>make sim / regress</code></td><td>单类调试 / 六类回归</td><td>写 <code>runs/&lt;TAG&gt;/</code></td></tr>
+      <tr><td><code>make syn / synall</code></td><td>综合（单角 / 三个角）</td><td><code>pdkcheck</code> → SDC → Genus → 解析 → 面积体检</td></tr>
+      <tr><td><code>make power</code></td><td>查看已跑综合的功耗与假设</td><td>不重跑综合</td></tr>
+      <tr><td><code>make collect / table</code></td><td><code>runs/</code> → metrics.csv → 报告表格</td><td>报告表 2/3 的唯一来源</td></tr>
+    </tbody>
+    <caption>规则：任何流程改动都先进 <code>flow/</code> 再进 <code>Makefile</code>，不许手敲工具命令——
+      手敲的命令没法复现，而“复现”是 10 分。</caption>
+  </table>
+  </div>
+
+  <p>三条设计上的护城河值得单独说，因为每一条都对应一次踩过的坑：</p>
+  <ul>
+    <li><b>数值格式只有一个真源。</b> <code>config/variants.mk</code> 的三行（qb/qf/lut）同时决定
+      三处：C 模型导出哪个黄金值、RTL 编译时的 <code>Q_BITS/Q_FRAC</code>、tb 读哪个 <code>exp</code> 文件。
+      三者同源，才不会出现“向量按 16 bit 生成、RTL 按 10 bit 综合”。</li>
+    <li><b>端口契约用宏，不用 SV interface。</b> interface 在 Genus 上要额外开关才综合，而宏头文件在所有工具上都通行。
+      这是“本地能验”和“服务器能综合”的交集。</li>
+    <li><b>三条方案目录并行，不用分支。</b> 分支切来切去没法同时综合、同时对比，公共 bug 修复要 rebase 三次，
+      忘记同步一次对比就失真。<b>分支区分“做完了没”，目录区分“是哪个方案”。</b></li>
+  </ul>
+</section>
+
+<!-- ================= 08 ================= -->
+<section id="s08">
+  <h2 class="sec"><span class="num">08</span>现状、风险与下一步</h2>
+  <p class="sub">已经能跑通的是“数值 + 验证 + 流程”，还没拿到的是“综合数字”和“第二、三套实现”。</p>
+
+  <h3>当前状态</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>模块</th><th>内容</th><th class="c">状态</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>需求</td><td>题面拆解、硬指标速查、待确认缺口</td><td class="c"><span class="tag ok">完成</span></td><td><code>docs/assignment/</code></td></tr>
+      <tr><td>数值</td><td>bit-accurate 模型、误差基线、位宽扫描、35 项单元自检</td><td class="c"><span class="tag ok">完成</span></td><td><code>error_baseline.txt</code> / <code>width_sweep.csv</code></td></tr>
+      <tr><td>向量</td><td>六类激励导出器，跨平台逐字节可复现</td><td class="c"><span class="tag ok">完成</span></td><td>37 文件 Linux/Windows 全同</td></tr>
+      <tr><td>验证</td><td>一份 tb 三 DUT、双判据、六类语义、覆盖率采样</td><td class="c"><span class="tag ok">完成</span></td><td><code>make flowtest</code> 双向验证</td></tr>
+      <tr><td>流程</td><td>VCS 编译/仿真/回归、Genus 综合、指标汇总</td><td class="c"><span class="tag ok">完成</span></td><td><code>hw/flow/</code></td></tr>
+      <tr><td>ref RTL</td><td>串行单 MAC，六类各 2 任务全 PASS</td><td class="c"><span class="tag ok">完成</span></td><td>0 失配 · 9665 拍</td></tr>
+      <tr><td>varA RTL</td><td>8 lane 并行点积</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varA/</code> 仅 filelist</td></tr>
+      <tr><td>varB RTL</td><td>脉动阵列 + 在线 Softmax</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varB/</code> 仅 filelist</td></tr>
+      <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag todo">待回填</span></td><td><code>EXPERIMENTS.md</code> 主表为空</td></tr>
+      <tr><td>报告</td><td>表 1/2/3 ＋ 个人贡献说明</td><td class="c"><span class="tag plan">待写</span></td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>风险清单</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th class="c">#</th><th>风险</th><th>影响</th><th>缓解</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td><b>统一参考实现尚未领取</b>（不知去哪领、什么形式交付）</td><td>40 分的效率项全部建立“相对改善”上，拿不到就无从评测</td><td>已列进待问助教清单；先用自己的 ref 顶住，结构一旦拿到就替换</td></tr>
+      <tr><td class="c">2</td><td><b>运行频率如何设定未明确</b></td><td>直接决定时延与能耗的分母</td><td>报“实际综合频率 ＋ WNS ＋ f_max 估计”，三种口径都给</td></tr>
+      <tr><td class="c">3</td><td>varA / varB 尚未实现</td><td>没有对照就没有 40 分</td><td>数值与 tb 已就绪，RTL 只是翻译；先保 varA，varB 可降级为“同阵列不同调度”</td></tr>
+      <tr><td class="c">4</td><td>量化误差相干叠加（近并行 K 行）</td><td>退化输入下误差放大 3～5 倍</td><td>已计入安全垫（10 bit 仍留 3 倍）；不足则退 12 bit（面积 56%）</td></tr>
+      <tr><td class="c">5</td><td>面积口径是否含 SRAM 未确认</td><td>影响效率项的分子</td><td>本设计未用宏，两种口径下数字相同——这点反而是优势</td></tr>
+      <tr><td class="c">6</td><td>URG 覆盖率报告出不来</td><td>无法给行覆盖率百分比</td><td>改用六类回归表作为证据链（更贴题面要求）</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>下一步（按依赖排序）</h3>
+  <ol>
+    <li><b>跑通 ref 首版综合</b> → 回填 <code>EXPERIMENTS.md</code> 主表第一行，拿到 A₀ / D₀ / E₀。
+      这是所有相对改善的分母，没有它后面全是空转。</li>
+    <li><b><code>make synall</code> 跑三个角</b> → 确认 ss 角下 100 MHz 仍收敛（否则要降频并重记）。</li>
+    <li><b>varA RTL 就位</b> → 同一套 <code>pdk.mk</code> 综合，得到 A₀/A、D₀/D、E₀/E 的第一组真实比值。</li>
+    <li><b>频率扫描</b>（80 / 100 / 120 / 150 MHz 各综合一次）→ 画“能耗 vs 频率”曲线，
+      这是报告里最能体现取舍分析的一张图。</li>
+    <li><b>单变量对照</b>：KE 并行度 4 → 8，其余条件不动，填表 3。</li>
+    <li><b>报告与贡献说明</b>：表 1（功能精度）/ 表 2（效率）/ 表 3（单变量）＋ 每人参与内容。</li>
+  </ol>
+
+  <div class="callout key">
+    <span class="lbl">一句话总结这套方案的赌注</span>
+    <p>我们把分数押在<b>“数值上做深、结构上做对比”</b>，而不是“堆一个很花的加速器”。
+    理由是：16×16 的规模根本吃不满任何阵列，真正能拉开差距的是<b>位宽（面积 ∝ QB²）</b>和
+    <b>Softmax 的实现方式（一次倒数、LUT 化 exp）</b>。前者已有 15 倍精度余量作保，
+    后者有可综合的 RTL 作证——这两条在答辩时都能落到具体电路上，而不是停在架构框图。</p>
+  </div>
+</section>
+
+<footer>
+  <span><b>题目一 · 总体方案综述</b>　数字集成电路设计 · 2026 秋</span>
+  <span class="sep"></span>
+  <span>依据 <code>docs/assignment</code> · <code>docs/theory</code> · <code>hw/config</code> · <code>hw/results</code>　2026-10-29</span>
+</footer>
+
+</div>
+</body>
+</html>
