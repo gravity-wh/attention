@@ -455,7 +455,8 @@ footer .sep{flex:1}
         结构　单 MAC 串行点积<br>
         数值　qb16 / qf13（贴近 FP16）<br>
         频率　<b>100 MHz</b><br>
-        实测　<b>9665 拍</b> · 六类 PASS
+        实测　<b>9665 拍</b> · 六类 PASS<br>
+        综合　<b>441 635 µm²</b> · WNS 0 ns · 138 mW
       </div>
     </div>
     <div class="var-card a">
@@ -1167,7 +1168,7 @@ footer .sep{flex:1}
       <tr><td>ref RTL</td><td>串行单 MAC，六类各 2 任务全 PASS</td><td class="c"><span class="tag ok">完成</span></td><td>0 失配 · 9665 拍</td></tr>
       <tr><td>varA RTL</td><td>8 lane 并行点积</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varA/</code> 仅 filelist</td></tr>
       <tr><td>varB RTL</td><td>脉动阵列 + 在线 Softmax</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varB/</code> 仅 filelist</td></tr>
-      <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag todo">待回填</span></td><td><code>EXPERIMENTS.md</code> 主表为空</td></tr>
+      <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag wip">ref 已出</span></td><td><code>metrics.csv</code>：A 441 635 µm² · 9665 拍 · D 96.65 µs · E 13 369 nJ · WNS 0</td></tr>
       <tr><td>报告</td><td>表 1/2/3 ＋ 个人贡献说明</td><td class="c"><span class="tag plan">待写</span></td><td>—</td></tr>
     </tbody>
   </table>
@@ -1184,6 +1185,8 @@ footer .sep{flex:1}
       <tr><td class="c">4</td><td>量化误差相干叠加（近并行 K 行）</td><td>退化输入下误差放大 3～5 倍</td><td>已计入安全垫（10 bit 仍留 3 倍）；不足则退 12 bit（面积 56%）</td></tr>
       <tr><td class="c">5</td><td>面积口径是否含 SRAM 未确认</td><td>影响效率项的分子</td><td>本设计未用宏，两种口径下数字相同——这点反而是优势</td></tr>
       <tr><td class="c">6</td><td>URG 覆盖率报告出不来</td><td>无法给行覆盖率百分比</td><td>改用六类回归表作为证据链（更贴题面要求）</td></tr>
+      <tr><td class="c">7</td><td><b>活动率未能按申报值设置</b>（Genus 15.20 无 <code>set_switching_activity</code>）</td><td>功耗绝对值含工具默认假设</td><td>报告中标注“工具默认活动率”；三方案同口径，相对值仍有效</td></tr>
+      <tr><td class="c">8</td><td>共用一台虚拟机，并发调用互相破坏工作目录</td><td>综合跑 8 分钟后目录凭空消失，仿真被顺手 pkill</td><td>长任务走独立目录 <code>/root/syn_work</code>；仿真器可改名 <code>SIMV_NAME</code></td></tr>
     </tbody>
   </table>
   </div>
