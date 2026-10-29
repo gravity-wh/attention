@@ -1,28 +1,28 @@
-# RTL 测试向量清单（确定性内容，不含时间戳；生成环境见 geninfo.txt）
+# RTL 测试向量清单（确定性内容，不含时间戳；生成环境见 geninfo_<cfg>.txt）
 format    : ATTN_VEC_2
 seed      : 20260101
-cfg_tag   : qb16qf13
-cfg_qb    : 16
-cfg_qf    : 13
+cfg_tag   : qb10qf7
+cfg_qb    : 10
+cfg_qf    : 7
 cfg_lut   : 4
 cfg_approx: 1
 matrix    : 16x16, 行主序, 元素 (i,j) 位于 i*16+j
 qkv.hex   : 768 个 16bit — Q[0..255] K[256..511] V[512..767]（与格式无关，全方案共享）
-exp.hex   : 256 个 16bit — qb16qf13 格式下逐位一致的期望输出
+exp.hex   : <base>_exp_qb10qf7.hex — 256 个 16bit，qb10qf7 格式下逐位一致的期望输出
 ref.hex   : 256 个 64bit — float64 参考（RMSE 用，与格式无关）
 #
 # 以下每行一个任务：<文件基名> <类别> <行Σp 最小值> <行Σp 最大值>
 # 行Σp 理想值 65536（Q16），偏离量就是倒数单元的体检结果
-random_0         random            65533    65538
-random_1         random            65533    65538
+random_0         random            65534    65537
+random_1         random            65534    65537
 zero_0           all-zero          65536    65536
 zero_1           all-zero          65536    65536
 extreme_0        extreme           65533    65538
 extreme_1        extreme           65533    65538
 cancel_0         cancellation      65536    65536
 cancel_1         cancellation      65535    65537
-reset_0          reset-recover     65533    65538
-reset_1          reset-recover     65533    65538
+reset_0          reset-recover     65534    65537
+reset_1          reset-recover     65534    65537
 cont_0           consecutive       65535    65538
 cont_1           consecutive       65535    65538
 #

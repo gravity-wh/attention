@@ -35,5 +35,8 @@ Makefile  text eol=lf
 *.hex     text eol=lf
 *.mem     text eol=lf
 
-# 向量清单由 Linux 侧脚本追加写入，固定 LF 免得混行尾
-hw/tb/vectors/**/manifest.txt  text eol=lf
+# 向量清单与生成环境记录：固定 LF。
+# 注意：这里只规范化"提交内容"。dumpvec 用 "wb" 写文件，磁盘上的字节
+# 在 Windows 与 Linux 上本来就相同，不依赖这条规则。
+hw/tb/vectors/**/manifest_*.txt  text eol=lf
+hw/tb/vectors/**/geninfo_*.txt   text eol=lf

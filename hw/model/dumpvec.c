@@ -20,9 +20,11 @@
  *    不分开命名的话，后跑的方案会静默覆盖前一个的黄金值，
  *    tb 会拿 varA 的输出跟 ref 的期望比，报一堆看起来像 RTL bug 的失配。
  *
- *  另有 manifest.txt 记录 seed、定点配置、任务清单与每行 Σp。
+ *  另有 manifest_<cfg>.txt 记录 seed、定点配置、任务清单与每行 Σp。
+ *  它同样按格式分文件：逐任务的"行 Σp"区间随格式变，共用一个名字会让
+ *  后跑的方案覆盖前一个的清单。
  *  manifest 只写确定性的内容（不含时间戳/主机名），这样同一 seed 重跑
- *  在 git 里是零 diff；生成环境另外记在 geninfo.txt。
+ *  在 git 里是零 diff；生成环境另外记在 geninfo_<cfg>.txt。
  *
  *  用法：
  *    attn_dumpvec <seed> <outdir> <smoke|full> <qb> <qf> <lut>
@@ -59,12 +61,16 @@ static void cfg_tag(char *buf, size_t n, const attn_cfg_t *c)
 }
 
 /* ---------------------------------------------------------------- 写文件 */
+/* 必须用 "wb"。用 "w" 的话，Windows 的 CRT 会把每个 '\n' 翻成 "\r\n"，
+ * 于是同一个程序在 Windows 上写出的向量和 Linux 上的不是同一串字节 ——
+ * "同一 seed 必然复现同一批向量"这条就不成立了。
+ * .gitattributes 只规范化提交内容，掩盖不了磁盘上的差异。 */
 static FILE *openw(const char *dir, const char *base, const char *suffix)
 {
     char path[1024];
     FILE *fp;
     snprintf(path, sizeof(path), "%s/%s%s", dir, base, suffix);
-    fp = fopen(path, "w");
+    fp = fopen(path, "wb");
     if (!fp) { perror(path); exit(1); }
     return fp;
 }
@@ -162,11 +168,15 @@ int main(int argc, char **argv)
     cfg_tag(tag, sizeof(tag), &cfg);
 
     if (!check) {
-        snprintf(path, sizeof(path), "%s/manifest.txt", dir);
-        man = fopen(path, "w");
+        /* 清单里既有 cfg_tag，也有逐任务的"行 Σp"区间 —— 后者随格式变。
+         * 曾用固定的 manifest.txt，结果生成 varA(10/7) 时把 ref(16/13) 的
+         * 清单覆盖掉：ref 的 Σp 体检结果丢失，且 git 每换一次格式就churn
+         * 一次。清单必须按格式一份，与 _exp_<tag>.hex 保持同一套命名。 */
+        snprintf(path, sizeof(path), "%s/manifest_%s.txt", dir, tag);
+        man = fopen(path, "wb");
         if (!man) { perror(path); return 1; }
 
-        fprintf(man, "# RTL 测试向量清单（确定性内容，不含时间戳；生成环境见 geninfo.txt）\n");
+        fprintf(man, "# RTL 测试向量清单（确定性内容，不含时间戳；生成环境见 geninfo_<cfg>.txt）\n");
         fprintf(man, "format    : ATTN_VEC_2\n");
         fprintf(man, "seed      : %llu\n", (unsigned long long)seed);
         fprintf(man, "cfg_tag   : %s\n", tag);
@@ -177,7 +187,8 @@ int main(int argc, char **argv)
         fprintf(man, "matrix    : %dx%d, 行主序, 元素 (i,j) 位于 i*%d+j\n",
                 ATTN_MX, ATTN_MX, ATTN_MX);
         fprintf(man, "qkv.hex   : 768 个 16bit — Q[0..255] K[256..511] V[512..767]（与格式无关，全方案共享）\n");
-        fprintf(man, "exp.hex   : 256 个 16bit — %s 格式下逐位一致的期望输出\n", tag);
+        fprintf(man, "exp.hex   : <base>_exp_%s.hex — 256 个 16bit，%s 格式下逐位一致的期望输出\n",
+                tag, tag);
         fprintf(man, "ref.hex   : 256 个 64bit — float64 参考（RMSE 用，与格式无关）\n");
         fprintf(man, "#\n");
         fprintf(man, "# 以下每行一个任务：<文件基名> <类别> <行Σp 最小值> <行Σp 最大值>\n");

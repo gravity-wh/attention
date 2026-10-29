@@ -72,9 +72,12 @@ venv/
 .ipynb_checkpoints/
 
 # ---- 模型层编译产物（make 一次就生成）----
+#  Windows 产物带 .exe，Linux 产物不带；两边都要忽略，否则在 NAS 上
+#  git status 会把四个可执行文件报成未跟踪，掩盖真正的改动。
 *.exe
 hw/model/attn_baseline
 hw/model/attn_selftest
+hw/model/attn_dumpvec
 hw/model/sweep
 
 # ---- 系统 / 编辑器 ----

@@ -1,5 +1,5 @@
-generated = 2026-10-29T18:16:37+08:00
+generated = 2026-10-29T20:03:28+08:00
 host      = LAPTOP-3O3VAI1N
 gcc       = gcc.exe (conda-forge gcc 15.2.0-20) 15.2.0
 mode      = smoke
-cfg       = qb16qf13
+cfg       = qb10qf7

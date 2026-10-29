@@ -17,6 +17,15 @@ TAG="_flowtest"
 RUN="runs/$TAG"
 OUT="tb/vectors/s$SEED"
 
+# 数值格式必须由调用方给出（make flowtest 从 config/variants.mk 传下来）。
+# 这里曾经写 ${QB:-16} / ${CFGTAG:-qb16qf13} 兜底，等于在"格式唯一真源"
+# 之外又留了一份默认值：万一调用方漏传，flowtest 会拿 16/13 的黄金值去
+# 校验 10/7 的 DUT，然后报一个看着像 RTL bug 的失配 —— 这类失配最费时间。
+: "${QB:?未设置 QB —— 请用 make flowtest 调用（值来自 config/variants.mk）}"
+: "${QF:?未设置 QF —— 请用 make flowtest 调用}"
+: "${LUT:?未设置 LUT —— 请用 make flowtest 调用}"
+: "${CFGTAG:?未设置 CFGTAG —— 请用 make flowtest 调用}"
+
 mkdir -p "$RUN"
 
 if [ ! -d "$OUT" ]; then
@@ -32,9 +41,9 @@ vcs -full64 -sverilog -timescale=1ns/1ps \
     -pvalue+tb_attn.CLK_MHZ=100 \
     +define+DUT=top_stub \
     "+define+DUT_NAME=\"top_stub\"" \
-    +define+ATTN_QB="${QB:-16}" \
-    +define+ATTN_QF="${QF:-13}" \
-    +define+ATTN_LUT="${LUT:-4}" \
+    +define+ATTN_QB="$QB" \
+    +define+ATTN_QF="$QF" \
+    +define+ATTN_LUT="$LUT" \
     +incdir+rtl/common \
     rtl/common/attn_pkg.sv \
     tb/common/attn_tb_pkg.sv \
@@ -52,7 +61,7 @@ echo
 echo "================================================================"
 echo " A. 判据自检（预期 PASS）"
 echo "================================================================"
-"$RUN/simv" +VECDIR="$OUT" +CFG="${CFGTAG:-qb16qf13}" +CAT=random +N=1 +SELFTEST=1 -l "$RUN/selftest.log" > /dev/null 2>&1
+"$RUN/simv" +VECDIR="$OUT" +CFG="$CFGTAG" +CAT=random +N=1 +SELFTEST=1 -l "$RUN/selftest.log" > /dev/null 2>&1
 grep -E "^\[SELFTEST\]" "$RUN/selftest.log" || tail -5 "$RUN/selftest.log"
 # 判 PASS/FAIL 一律解析日志，不看 simv 退出码：
 # VCS 的 $finish 永远返回 0，$fatal 又会卡约 90 秒才退出，退出码不可依赖。
@@ -66,7 +75,7 @@ echo
 echo "================================================================"
 echo " B. 夹具自检（stub 输出全 0，预期 FAIL 且退出码 1）"
 echo "================================================================"
-"$RUN/simv" +VECDIR="$OUT" +CFG="${CFGTAG:-qb16qf13}" +CAT=random +N=1 -l "$RUN/stub.log" > /dev/null 2>&1
+"$RUN/simv" +VECDIR="$OUT" +CFG="$CFGTAG" +CAT=random +N=1 -l "$RUN/stub.log" > /dev/null 2>&1
 grep -m2 -E "^\[task|结果：" "$RUN/stub.log" || true
 
 # 判据以 [SUMMARY] 的 status 字段为准，不以 simv 的退出码为准：

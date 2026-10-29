@@ -12,7 +12,9 @@
 #  这里不给默认值：脚本里再写一份默认值，就等于给"格式漂移"留了后门。
 #
 #  产出： tb/vectors/s<seed>/      （smoke 集进版本库，full 集不进）
-#         qkv / ref 与格式无关，全方案共享；exp 带格式标签 _exp_qb<qb>qf<qf>
+#         qkv / ref 与格式无关，全方案共享；
+#         exp 带格式标签：_exp_qb<qb>qf<qf>.hex
+#         清单也按格式分：manifest_qb<qb>qf<qf>.txt / geninfo_qb<qb>qf<qf>.txt
 #  环境： QB QF LUT CFGTAG MODE  由 hw/Makefile export
 # =====================================================================
 set -uo pipefail
@@ -43,26 +45,32 @@ fi
 
 mkdir -p "$OUT"
 
-# 旧版脚本写的是不带标签的 _exp.hex。留着它会让 tb 悄悄读到过期黄金值，
-# 所以一旦发现就删掉（只删这一种，不动别的文件）。
-STALE=$(ls "$OUT"/*_exp.hex 2>/dev/null | wc -l)
-if [ "$STALE" -gt 0 ]; then
-    echo "[vec] 清理 $STALE 个旧版无标签 _exp.hex（已改为 _exp_$TAG.hex）"
+# 旧版脚本写的是不带标签的 _exp.hex / manifest.txt / geninfo.txt。
+# 留着它们会让 tb 悄悄读到过期黄金值，或让人以为清单是最新的，
+# 所以一旦发现就删掉（只删这三种，不动别的文件）。
+STALE_EXP=$(ls "$OUT"/*_exp.hex 2>/dev/null | wc -l)
+if [ "$STALE_EXP" -gt 0 ]; then
+    echo "[vec] 清理 $STALE_EXP 个旧版无标签 _exp.hex（已改为 _exp_$TAG.hex）"
     rm -f "$OUT"/*_exp.hex
+fi
+if [ -f "$OUT/manifest.txt" ] || [ -f "$OUT/geninfo.txt" ]; then
+    echo "[vec] 清理旧版无标签 manifest.txt / geninfo.txt（已改为 *_$TAG.txt）"
+    rm -f "$OUT/manifest.txt" "$OUT/geninfo.txt"
 fi
 
 echo "[vec] 导出 seed=$SEED mode=$MODE cfg=$TAG (qb=$QB qf=$QF lut=$LUT)"
 model/attn_dumpvec "$SEED" "$OUT" "$MODE" "$QB" "$QF" "$LUT" || exit 1
 
-# 生成环境单独记一个文件：manifest.txt 只放确定性的内容，
+# 生成环境单独记一个文件：manifest_<cfg>.txt 只放确定性的内容，
 # 这样同一 seed 重跑在 git 里是零 diff，而"谁在哪台机器上生成的"也查得到。
+# 同样按格式分文件 —— 它记录的就是"这个格式是在哪生成的"。
 {
     echo "generated = $(date -Iseconds)"
     echo "host      = $(hostname)"
     echo "gcc       = $(gcc --version 2>/dev/null | head -1)"
     echo "mode      = $MODE"
     echo "cfg       = $TAG"
-} > "$OUT/geninfo.txt"
+} > "$OUT/geninfo_$TAG.txt"
 
 # 生成完立刻回读校验一遍：抓"写了但没写全"这类不会报错的失败
 model/attn_dumpvec --check "$SEED" "$OUT" "$MODE" "$QB" "$QF" "$LUT" || {

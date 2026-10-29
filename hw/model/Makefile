@@ -53,7 +53,7 @@ test: $(TBIN)
 err: $(BIN)
 	@mkdir -p ../results
 	./$(BIN) $(SEED) $(OUT) || true
-	@echo "→ $(OUT)"
+	@echo "-> $(OUT)"
 
 allrun: test err
 
