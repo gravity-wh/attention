@@ -63,10 +63,16 @@
 三个顶层一字不差地这样开头：
 
 ```systemverilog
-module top_ref #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
-module top_varA #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
-module top_varB #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
+module top_ref  `ATTN_TOP_PORTS;
+module top_varA `ATTN_TOP_PORTS;
+module top_varB `ATTN_TOP_PORTS;
 ```
+
+**顶层不带 `SEQ_LEN` / `D_HEAD` 参数。** 题面的 Attention 是 16×16 全矩阵
+（`ATTN_MX=16`，单矩阵 256 元素），N 由 C 模型的 `ATTN_MX` 定死，不是可旋钮；
+把它做成参数只会造出「RTL 按 8×64 综合、向量按 16×16 生成」这类对不上的事故
+（`attn_pkg.sv` 早期版本就踩过一次）。规模常量统一写在 `rtl/common/attn_pkg.sv`：
+`localparam int N = 16;`
 
 理由见下节实测：interface 在 iverilog 上直接语法错误，在 DC/Genus 上要额外开关
 才综合，而宏头文件在所有工具上都通行。**这是「本地能验」和「服务器能综合」的交集。**
@@ -254,6 +260,35 @@ Genus       = /opt/cadence/GENUS152/bin/genus
 环境变量写在 `/etc/profile.d/synopsys.sh`，并在 `/etc/bashrc` 里兜底 source，
 所以**登录 shell、`bash -c`、`make` 子进程都能拿到**（早期只写在 root 的 `.bashrc` 里，
 `make` 拿不到，这是最容易踩的坑）。
+
+### 实测耗时：热态秒级，冷启动先付一次"预热税"
+
+2026-10-29 在 `wang` 这台虚拟机上的实测（8 vCPU / 16 GB，宿主 i5-14600K，`steal=0`）：
+
+| 动作 | 热态（同一会话内） | 冷启动（开机后第一次） |
+|---|---|---|
+| `vcs` 编译一个最小 DUT | **8.9 s** | 40 ~ 138 s |
+| `simv` 跑完（0 周期仿真） | **4.6 ~ 5.6 s** | 23 ~ 26 s |
+| `make flowtest`（编译 + 两次仿真） | **17.5 s** | 80 s |
+| 强制重编 + 两次仿真 | 24 s | —— |
+
+结论：**不是每次都要等 40 秒，只有开机后第一次等。** 排除了三个常见嫌疑：
+
+- 不是 CPU 抢不到 —— `vmstat` 里 `id=100`、`st=0`，进程是真在睡不在跑；
+- 不是 DNS —— 解析 `solvnetplus.synopsys.com` 1.2 s，`www.baidu.com` 0.0 s；
+- 不是授权服务器连不上 —— `lmstat` 按主机名 1.7 s、按 `127.0.0.1` 1.6 s，`snpslmd` 一直 UP。
+
+strace 看到的是**几千个 31 ms 的 `poll()`** 拼出来的空等，全在 VCS/simv 进程内部，
+没有单个超长调用，也没有外网 socket。把 `-debug_access+all` / `-kdb` 一个个摘掉做对照，
+热态下三者都是 9 s 上下 —— 所以**不是开关的问题**，是进程首次初始化的固有代价。
+
+**操作约定**：开机后先跑一次 `make flowtest` 预热（顺便证明流程是好的），
+之后所有 `make sim/regress` 都在秒级。回归千万别每个类别重编一次——
+`build` 一次、`run` 六类，这套脚本本来就是这么设计的。
+
+> 另注：这台机器的 `LM_LICENSE_FILE` 里混进了 Cadence / Mentor 的授权路径
+> （`/opt/cadence/IC617/...`、`/opt/mentor/license/license.dat`）。
+> 实测把它们摘掉并不会变快，所以暂时不动——但它是未来"工具突然找授权变慢"的第一嫌疑点。
 
 ### 主机 ↔ 虚拟机 通道
 
