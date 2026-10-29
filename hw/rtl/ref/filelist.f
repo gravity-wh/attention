@@ -9,18 +9,20 @@
 //  顺序不能乱：SV 的 package / interface 必须先于使用者编译。
 // =====================================================================
 +incdir+rtl/common
++incdir+rtl/core
 
 // ---- 1. 公共层：attn_pkg.sv（类型/参数）+ attn_ports.svh（统一端口宏）----
 rtl/common/attn_pkg.sv
 rtl/common/attn_ports.svh
 
 // ---- 2. 共享数据通路：三方案尽量复用，以保「其余条件一致」----
-// rtl/core/fp16_mul.sv
-// rtl/core/fp16_add.sv
-// rtl/core/exp_lut.sv
-// rtl/core/mac_lane.sv
-// rtl/core/sram_wrap.sv
+//  这五个文件是「数值契约的硬件化身」：改任何一个都等于改三套方案的数值结果，
+//  所以它们必须在 core/ 而不是各方案目录下。
+rtl/core/attn_math.svh      // RNE 移位 / 饱和 / exp2 LUT（纯函数库）
+rtl/core/fp16_quant.sv      // FP16 -> s(QB).QF，装载时做一次
+rtl/core/exp2_unit.sv       // 2^(-d)：LUT + 线性插值 + 移位
+rtl/core/fix2fp16.sv        // 定点 -> FP16（RNE）
+rtl/core/recip_unit.sv      // 每行一次倒数 2^40/T（恢复余数法）
 
 // ---- 3. 本方案独有：只有编排/调度逻辑 ----
-// rtl/ref/top_ref.sv
-// rtl/ref/seq_engine.sv
+rtl/ref/top_ref.sv
