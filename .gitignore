@@ -49,6 +49,17 @@ fascia/
 hw/runs/**
 !hw/runs/.gitkeep
 
+# ---- 覆盖率数据库与报告（urg 生成，可随时重算）----
+*.vdb/
+simv.vdb/
+urgReport/
+hw/**/urgReport/
+
+# ---- 完整向量集：616 个任务约 9.8 MB，按需生成 ----
+# 只提交 smoke 集（每类 2 个任务），保证别人不经模型也能快速复跑；
+# seed 已进库，full 集永远可由 `make vec MODE=full` 逐位重算出来。
+hw/tb/vectors/*_full/
+
 # ---- 交付导出物（报告 pdf / pptx / 打包 zip）----
 deliverables/**
 !deliverables/.gitkeep
@@ -59,6 +70,12 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# ---- 模型层编译产物（make 一次就生成）----
+*.exe
+hw/model/attn_baseline
+hw/model/attn_selftest
+hw/model/sweep
 
 # ---- 系统 / 编辑器 ----
 .DS_Store

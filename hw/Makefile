@@ -17,19 +17,27 @@ include config/variants.mk
 VARIANT ?= ref
 TAG     ?= $(VARIANT)
 SEED    ?= 20260101
-SIM     ?= iverilog
-SYN     ?= yosys
-PY      ?= python
+SIM     ?= vcs
+SYN     ?= genus
+PY      ?= python3
+
+# ---- 仿真相关的默认档位 ------------------------------------------------
+# CAT：六类激励之一；日常迭代用 random，看细节用 VERBOSE=1
+CAT     ?= random
+N       ?= 2
+VERBOSE ?= 0
+# MODE：smoke=每类 2 个任务（秒级）；full=每类按模型设定（分钟级）
+MODE    ?= smoke
 
 RUN     := runs/$(TAG)
 FLIST   := rtl/$(VARIANT)/filelist.f
 TOP     := $(top_$(VARIANT))
 CLOCK   := $(clock_$(VARIANT))
-VECDIR  := tb/vectors/$(SEED)
+VECDIR  := tb/vectors/s$(SEED)
 
-export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT
+export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT MODE CAT N VERBOSE
 
-.PHONY: all help check vec sim lint syn power collect table manifest clean
+.PHONY: all help check model modeltest err vec sim regress flowtest lint syn power collect table manifest clean
 
 # 说明：这里刻意不用 shell 循环做变量间接引用——
 #       某些 Windows 环境下长命令行里的非 ASCII 会被截断，导致引号失配。
@@ -37,8 +45,13 @@ export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT
 
 help:
 	@echo "-- targets ----------------------------------------------------"
-	@echo "  make vec     SEED=...                生成测试向量 + 记录种子"
-	@echo "  make sim     VARIANT=<v> TAG=<t>     编译并跑自检测试平台"
+	@echo "  make model                           编译数值模型（无 EDA 依赖）"
+	@echo "  make modeltest                       模型单元自检（fp16/定点/exp2/端点）"
+	@echo "  make err     SEED=...                误差基线 → results/error_baseline.txt"
+	@echo "  make vec     SEED=... MODE=smoke|full  黄金模型导出 RTL 向量"
+	@echo "  make flowtest                        自检流程本身（不需要 RTL）"
+	@echo "  make sim     VARIANT=<v> CAT=<c>      编一个方案 + 跑一类激励"
+	@echo "  make regress VARIANT=<v> MODE=full    一个方案跑完六类（回归）"
 	@echo "  make lint    VARIANT=<v>             RTL 静态检查"
 	@echo "  make syn     VARIANT=<v> TAG=<t>     ASIC 综合（面积 / 时序）"
 	@echo "  make power   VARIANT=<v> TAG=<t>     功耗分析"
@@ -58,34 +71,43 @@ check:
 	@test -n "$(TOP)" || { echo "✗ config/variants.mk 里没有 top_$(VARIANT)"; exit 1; }
 	@mkdir -p $(RUN)
 
-# ---------------- 1. 测试向量（黄金模型生成，种子必须记录）----------------
-vec: check
-	@mkdir -p $(VECDIR)
-	$(PY) model/gen_vectors.py --seed $(SEED) --out $(VECDIR)
-	@printf "seed=%s\ngenerated=%s\nmodel=model/fp16_attn.py\n" $(SEED) "$$(date -Iseconds)" > $(VECDIR)/meta.txt
-	@echo "→ 向量写入 $(VECDIR)（该目录必须进版本库）"
+# ---------------- 0. 数值模型（黄金模型，不依赖任何 EDA 工具）------------
+# 顺序铁律：先模型后 RTL。模型跑不通，RTL 只是在翻译一个错误。
+model:
+	$(MAKE) -C model
 
-# ---------------- 2. 仿真 ----------------
+modeltest: model
+	$(MAKE) -C model test
+
+err: model
+	$(MAKE) -C model err SEED=$(SEED)
+
+# ---------------- 1. 测试向量（黄金模型直接导出，种子必须记录）----------------
+# 铁律：向量只能由 model/ 里的 C 模型产出。任何"另写一份生成器"的做法，
+#       都会让"逐位一致"这件事变成两份代码互相对答案，验证就失去意义。
+vec:
+	bash flow/sim/genvec.sh $(SEED) $(MODE)
+
+# 流程自检：不需要任何 RTL，验证 tb / 驱动 / 判据 / 退出码这条链路
+flowtest:
+	bash flow/sim/flowtest.sh $(SEED)
+
+# ---------------- 2. 仿真（VCS）----------------
+# 一次只跑一类激励。要跑全部六类用 make regress。
 sim: check
-ifeq ($(SIM),iverilog)
-	iverilog -g2012 -Wall -o $(RUN)/simv -s tb_$(TOP) -f $(FLIST) tb/sys/tb_$(TOP).sv \
-	  && vvp $(RUN)/simv +VECDIR=$(VECDIR)
-else ifeq ($(SIM),vcs)
-	vcs -full64 -sverilog -timescale=1ns/1ps -o $(RUN)/simv -f $(FLIST) tb/sys/tb_$(TOP).sv \
-	  && $(RUN)/simv +VECDIR=$(VECDIR)
-else ifeq ($(SIM),xrun)
-	xrun -sv -f $(FLIST) tb/sys/tb_$(TOP).sv +VECDIR=$(VECDIR) -l $(RUN)/sim.log
-else ifeq ($(SIM),vsim)
-	vlog -sv -f $(FLIST) tb/sys/tb_$(TOP).sv && vsim -c tb_$(TOP) -do "run -all; quit" -l $(RUN)/sim.log
-else
-	$(error SIM 只支持 iverilog / vcs / xrun / vsim)
-endif
+	bash flow/sim/build.sh $(VARIANT) $(TAG) $(CLOCK)
+	bash flow/sim/run.sh $(VARIANT) $(TAG) $(CAT) $(N) $(SEED) $(VERBOSE)
+	@$(MAKE) --no-print-directory manifest
+
+# 六类激励全跑。MODE=smoke 日常用，MODE=full 出报告数据用。
+regress: check
+	bash flow/sim/regress.sh $(VARIANT) $(TAG) $(SEED) $(MODE) $(CLOCK)
 	@$(MAKE) --no-print-directory manifest
 
 lint: check
 	@if command -v verilator >/dev/null; then \
 	  verilator --lint-only -Wall --top-module $(TOP) -f $(FLIST); \
-	else echo "· 未装 verilator，跳过 lint"; fi
+	else echo "· 未装 verilator，跳过 lint（VCS 编译本身就是最严的语法闸门）"; fi
 
 # ---------------- 3. 综合 / 功耗 ----------------
 syn: check

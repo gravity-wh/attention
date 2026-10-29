@@ -9,7 +9,7 @@
 
 | 路径 | 放什么 | 不许放什么 |
 |---|---|---|
-| `model/` | Python 黄金模型：bit-accurate 模型 + float64 参考 + 向量生成器 | 任何 RTL 相关的分析 |
+| `model/` | **C** 黄金模型：bit-accurate 模型 + float64 参考 + 向量生成器 | 任何 RTL 相关的分析 |
 | `rtl/common/` | `attn_pkg.sv`（类型/参数）、`attn_ports.svh`（统一端口宏） | 具体运算逻辑 |
 | `rtl/core/` | 三方案**共享**的数据通路：FP16 乘加、exp LUT、累加器、SRAM 包装 | 某个方案独有的调度逻辑 |
 | `rtl/ref/` `rtl/varA/` `rtl/varB/` | 该方案**独有**的顶层与引擎 + 该方案的 `filelist.f` | 三份重复的公共模块 |
@@ -80,106 +80,224 @@ module top_varB #(parameter int SEQ_LEN = 8, D_HEAD = 64) `ATTN_TOP_PORTS;
 
 ---
 
-## 三、验证代码怎么放
+## 三、验证架构：一份 tb 驱动三个 DUT
 
 ### 顺序铁律：先模型，后 RTL
 
-1. `model/ref_float64.py` —— 用 float64 算一遍，得到评分用的参考（算 RMSE / 最大绝对误差）。
-2. `model/fp16_attn.py` —— **bit-accurate** 模型：逐位复现你 RTL 的量化、累加宽度、
+1. `model/attn_model.c`（`attn_ref()`）—— 用 float64 算一遍，得到评分用的参考（算 RMSE / 最大绝对误差）。
+2. `model/attn_model.c`（`attn_fixed()`）—— **bit-accurate** 模型：逐位复现你 RTL 的量化、累加宽度、
    近似 exp、舍入方式。这是「与自身软件模型逐位一致」的比对对象，也是 RTL 的规格书。
    *RTL 写不通时先改模型，模型跑通了 RTL 只是翻译。*
-3. `model/gen_vectors.py` —— 按题面要求的六类场景生成向量：
-   随机 / 全零 / 正负极值 / 相消 / 复位 / 连续任务。**seed 必须写进 `meta.txt` 并进库**，
+   数值契约（位宽 / 小数位 / LUT / 舍入）写在 `model/attn_model.h` 顶部，
+   设计依据写在 `docs/theory/01-数值格式设计.md`。
+3. `model/vecgen.c` + `model/dumpvec.c` —— 按题面要求的六类场景生成向量，
+   并直接导出成 tb 能 `$readmemh` 的文件。**seed 必须记录并进库**，
    因为报告表 1 要填「测试集版本及随机种子」。
 
-### 三层 testbench，别混
+> **为什么向量必须由 C 模型导出，而不是另写一个 Python 脚本重算一遍**：
+> "逐位一致的软件模型"和"测试向量"必须出自**同一份代码**。只要多一条重新实现的路径，
+> 就多一个不一致的来源——而那正是这项要被扣分的地方。
 
-| 层 | 位置 | 职责 |
+### 向量契约（tb 依赖它，改格式 = 改 tb）
+
+`flow/sim/genvec.sh` 把每个任务写成三个文件，每行一个值：
+
+| 文件 | 内容 |
+|---|---|
+| `<cat>_<idx>_qkv.hex` | 768 个 16 bit：`Q[0..255] K[256..511] V[512..767]`，行主序 |
+| `<cat>_<idx>_exp.hex` | 256 个 16 bit：**逐位一致**的期望输出（FP16 位模式） |
+| `<cat>_<idx>_ref.hex` | 256 个 64 bit：float64 参考值，tb 用 `$bitstoreal` 还原后算 RMSE |
+
+还有 `manifest.txt` 记 seed、定点配置（qb/qf/lut）、任务清单、以及每行的 Σp 偏差。
+`cat` 取 `random / zero / extreme / cancel / reset / cont` 六个短名。
+
+两档规模：`MODE=smoke` 每类 2 个任务（37 个文件、约 110 KB，**进版本库**）；
+`MODE=full` 共 616 个任务（1849 个文件、9.8 MB，按需生成、不进库，但 seed 进库）。
+
+### 一份 tb，三个 DUT
+
+```
+                    tb/sys/tb_attn.sv        ← 驱动 / 采样 / scoreboard / 覆盖率，只写一份
+                            │
+              +define+DUT=top_ref  (或 top_varA / top_varB)
+                            ▼
+      ┌──────────────┬──────────────┬──────────────┐
+   top_ref        top_varA       top_varB      ← 各自 filelist.f 隔离
+      └──────────────┴──────────────┴──────────────┘
+                            ▼
+                  rtl/core/  共享数据通路
+```
+
+编译时用 `+define+DUT=top_xxx` 注入被测顶层，三个方案共用同一份驱动、同一份判据、
+同一份覆盖率——**对比条件天然成立**，不靠人守着。
+
+### 两条判据同时成立才算 PASS
+
+| 判据 | 含义 | 阈值 |
 |---|---|---|
-| 单元 | `tb/unit/` | 每个 core 模块单独验，比对对象是模型的对应函数 |
-| 系统 | `tb/sys/tb_top_*.sv` | 驱动统一接口、喂向量、收结果、scoreboard 比对、统计 RMSE |
-| 覆盖 | `tb/cov/` | 记录六类场景都跑到，作为「验证充分」的证据 |
+| 逐位一致 | 输出 FP16 与 C 定点模型 bit-exact | 0 个元素不同 |
+| 精度达标 | 对 float64 参考的 RMSE / 最大绝对误差 | ≤ 0.06 / ≤ 0.20 |
+| 有限值 | 输出不含 inf / NaN | 0 个 |
 
-`tb/sys/` 里**只写一份** testbench 的公共部分（driver/scoreboard/monitor），
-顶层差异靠 `+define+TOP=...` 或 `config/variants.mk` 传入，不要复制三份 tb。
+只过第一条 → RTL 忠实于一个错误的模型；只过第二条 → 模型和 RTL 不是一回事。
+两条都过，才说明"这个 RTL 实现了那个模型，而那个模型精度够用"。
+
+### 六类激励怎么落到 tb 里
+
+| 类别 | 向量 | tb 侧额外做的事 |
+|---|---|---|
+| `random` | 均匀随机 ∈[-2,2] | —— |
+| `zero` | 全零；奇数号只让 V 非零 | 查 0/0 不产生 NaN |
+| `extreme` | {-2,-1,0,1,2}，强制第 0 行全 +2、第 1 行全 -2 | 打饱和与符号对称 |
+| `cancel` | Hadamard 正交 / 近并行 K 行交替 | 打累加器与 softmax 分辨率 |
+| `reset` | 随机任务 | **复位后重跑，两次输出必须逐位相同** |
+| `cont` | 随机任务，**不复位**连续跑 | 与干净状态的期望值比对，查状态泄漏 |
+
+### 覆盖率：能采，但出不了 urg 报告（license 限制）
+
+`tb_attn.sv` 里用 `covergroup` 采样四类点：类别、时延桶、是否失配、RMSE 分布，
+外加 `lat × mismatch` 交叉。实测结论：
+
+| 环节 | 状态 |
+|---|---|
+| `vcs -cm line+cond+fsm+tgl+branch` 编译 | ✅ 通过 |
+| `simv -cm ...` 仿真、产生 `simv.vdb` | ✅ 通过 |
+| **`urg -dir simv.vdb` 出报告** | ❌ **崩在 `covdb_get_license()`，这台机器的 license 不含 URG 特性** |
+
+所以 `flow/sim/build.sh` **默认不开 `-cm`**（采了也没法出报告，只是拖慢仿真）。
+需要行/条件覆盖率数字时：`CM=1 make sim ...`，然后接受"数据在 vdb 里、报告要换台有 license 的机器出"。
+
+**报告里怎么写**：题面要的是"六类激励都覆盖到"，不是行覆盖率百分比。
+所以证据链是 `results/` 里六类回归表（每类一行、状态 PASS）+ `runs/<TAG>/sim_<cat>.log`，
+而不是一个覆盖率百分比数字。这样反而更贴题，也不依赖 license。
 
 ### 波形
 
-波形（`.vcd/.fsdb`）**永远不进版本库**，也**永远不写在网络盘上**——
-本项目在 NAS（`//home-nas/...`）上，直接 dump 波形会把仿真拖慢一个数量级。
-做法：`$dumpfile` 指向本地临时盘（如 `$::env(TMPDIR)/wave.vcd`），只在调试时开。
+波形（`.vcd/.fsdb`）**永远不进版本库**，也**永远不写在网络盘上**。
+`tb_attn.sv` 只在 `+DUMP=1` 时开 dump，默认关——回归时开着会慢一个数量级。
+看到失配再单独开一次，用 Verdi 打开。
 
 ---
 
-## 四、一次实验的标准动作（六步，别跳）
+## 四、一次实验的标准动作（七步，别跳）
+
+所有命令都在**虚拟机里的 `/root/work/hw`** 执行（环境变量见第五节）。
 
 ```bash
-cd hw/
+cd /root/work/hw
+
+# 0. 确认流程本身是好的（第一次跑、或改了 tb 之后必做）
+make flowtest
 
 # 1. 确认工作区干净 —— 脏工作区跑出来的结果绑不到 commit，等于白跑
 git status --porcelain
 
 # 2. 生成/确认向量（首次或换 seed 时）
-make vec SEED=20260101
+make vec SEED=20260101 MODE=smoke     # 日常
+make vec SEED=20260101 MODE=full      # 出报告数据前
 
-# 3. 跑仿真，给这次实验起个能看懂的名字
-make sim VARIANT=varA TAG=varA-ke8-w8
+# 3. 单类激励调试（快，出问题先看这个）
+make sim VARIANT=ref CAT=random N=2 VERBOSE=1
 
-# 4. 综合 + 功耗（同一个 TAG，才能和仿真结果配对）
-make syn   VARIANT=varA TAG=varA-ke8-w8
-make power VARIANT=varA TAG=varA-ke8-w8
+# 4. 六类全跑（回归）—— MODE 必须与第 2 步一致
+make regress VARIANT=ref TAG=ref-smoke MODE=smoke
+make regress VARIANT=ref TAG=ref-full  MODE=full
 
-# 5. 提取指标
+# 5. 综合 + 功耗（同一个 TAG，才能和仿真结果配对）
+make syn   VARIANT=ref TAG=ref-full
+make power VARIANT=ref TAG=ref-full
+
+# 6. 提取指标
 make collect
 
-# 6. 在 results/EXPERIMENTS.md 记一行：commit ↔ 变量 ↔ 指标
-git add -A && git commit -m "varA: KE=8, w=8 -> A=xx um2, D=xx us, E=xx nJ"
+# 7. 在 results/EXPERIMENTS.md 记一行：commit ↔ 变量 ↔ 指标
+git add -A && git commit -m "ref: 基准 -> RMSE=xx, A=xx um2, D=xx us, E=xx nJ"
 ```
 
-每次 `make` 都会写 `runs/<TAG>/INFO.txt`，里面有 commit、seed、clock、PVT、工具版本。
+每次 `make sim/regress` 都会写：
+
+| 产物 | 内容 |
+|---|---|
+| `runs/<TAG>/INFO.txt` | commit、seed、clock、PVT、工具版本、工作区是否干净 |
+| `runs/<TAG>/build.log` | 完整编译日志 |
+| `runs/<TAG>/sim_<cat>.log` | 该类别的完整仿真日志（含 `[SUMMARY]` 机器可读行） |
+| `runs/<TAG>/summary.csv` | 每个类别一行指标，`make table` 直接吃这个 |
+
 **这就是「复现」那 10 分的证据链**：报告里每个数字都能顺着 TAG → INFO.txt → commit 找回原始日志。
 
 ---
 
-## 五、工具与语言子集（2026-10-29 实测）
+## 五、工具栈与运行环境（2026-10-29 实测）
 
-### 本机现状
+### 三层分工
 
-| 工具 | 位置 | 状态 |
+| 环节 | 在哪做 | 说明 |
 |---|---|---|
-| Icarus Verilog **12.0** | WSL2 Ubuntu 24.04 `/usr/bin/iverilog` | ✅ 已装 |
-| GTKWave | 同上 | ✅ 已装 |
-| Verilator 5.020 | apt 源里有，未装 | ⬜ `sudo apt install verilator` |
-| VCS / Verdi 2023.12-SP2 | `H:\w1465\vcs verdi 2023.12\pkg`（Linux 安装包） | ❌ 需 Linux 虚拟机 + license，本机跑不了 |
+| 写代码 / 编辑 | Windows（NAS 上的工程） | NAS 是唯一真源，git 在这里 |
+| **仿真 / 覆盖率 / 波形** | **CentOS 7 虚拟机** | VCS V-2023.12-SP2 + Verdi + URG，license 正常 |
+| **综合 / 功耗** | **同一台虚拟机** | Cadence **Genus 15.2**（`/opt/cadence/GENUS152`） |
+| 快速语法检查 | 虚拟机里 VCS 编译（1~2 秒） | 见下：iverilog 已退役 |
 
-**工程在 `//home-nas` 这个 UNC 路径上，WSL 不能直接 `cd` 进去。**
-本机跑仿真的两条路：把 `hw/` 放本地盘（推荐，仿真 IO 快得多），或
-`sudo mount -t drvfs '\\home-nas\MyWork' /mnt/nas`（能用但慢）。
+**结论：不要再往 Windows 或 WSL 上装仿真器。** 虚拟机里 VCS 编译这个规模的 RTL
+只要 1~2 秒，比"先装个 iverilog 本地跑一遍再同步"还快，而且少一条工具链要维护。
 
-### iverilog 12 的支持边界（决定了代码怎么写）
+### 虚拟机里的既有环境（别人已经装好的，直接用）
 
-实测结论，写 RTL 前先记住：
+```
+VCS_HOME    = /root/synopsys_apps/vcs/vcs/V-2023.12-SP2      （14 GB）
+VERDI_HOME  = /root/synopsys_apps/verdi/verdi/V-2023.12-SP2  （23 GB）
+SCL_HOME    = /root/synopsys_apps/scl/2021.03                （license 守护）
+license     = 27000@localhost.localdomain，FLEXlm host ID 000c293bbc9b
+Genus       = /opt/cadence/GENUS152/bin/genus
+```
 
-| 语法特性 | iverilog 12 | 说明 |
+环境变量写在 `/etc/profile.d/synopsys.sh`，并在 `/etc/bashrc` 里兜底 source，
+所以**登录 shell、`bash -c`、`make` 子进程都能拿到**（早期只写在 root 的 `.bashrc` 里，
+`make` 拿不到，这是最容易踩的坑）。
+
+### 主机 ↔ 虚拟机 通道
+
+```bat
+:: Windows 侧：NAS → 共享目录（增量，排除 runs/.git/波形/可执行）
+E:\candence_env\share\sync_from_nas.bat
+```
+
+```bash
+# 虚拟机侧：共享目录 → 本地盘再编译
+/root/work/prepare.sh
+```
+
+两条铁律：
+
+1. **绝不在 `/mnt/hgfs` 上直接跑仿真**。hgfs 走 FUSE，写 `simv` 中间文件和覆盖率数据库
+   会慢一个数量级。`prepare.sh` 就是干这件事的：先 `cp -a` 到 `/root/work/hw` 再动手。
+2. **调用 `vmrun.exe` 必须设 `MSYS_NO_PATHCONV=1`**。否则 Git Bash 会把客户机路径
+   `/bin/echo` 自动转成 Windows 路径，报"文件未找到"，而错误信息完全指不到真因。
+   另外 `vmrun` 会一直阻塞到客户机命令结束，长任务要放到受管后台里跑，别用 `&`。
+
+### 为什么 iverilog 退役了
+
+上一版方案为了在 WSL 里快跑，把端口契约从 SV `interface` 改成了宏头文件——这个决定**依然正确**
+（interface 在 Genus 上要额外开关，而接口跨工具一致是硬需求）。但现在有了 VCS，
+iverilog 的唯一优势（不需要 license）就不成立了，而它的三项缺失是硬伤：
+
+| 能力 | iverilog 12 | VCS |
 |---|---|---|
-| `package` / `typedef` / `enum` / `function` | ✅ | 已在 `attn_pkg.sv` 里用到 |
-| ANSI 端口 + package 限定类型 `p::fp16_t` | ✅ | |
-| `always_ff` / `always_comb` / `logic` | ✅ | |
-| 宏 + 反斜杠续行的多语句块 | ✅ | 这就是端口契约用宏的原因 |
-| **`interface` 出现在端口列表（`bus_if.dst b`）** | ❌ | 直接 syntax error |
-| **赋值模式 `'{hi:a, lo:b}`** | ❌ | struct 逐字段赋值得老实写 |
-| SVA 断言 / 功能覆盖率 / UVM | ❌ | 这三样只有 VCS 或 Verilator 能给 |
+| SVA 断言 | ❌ | ✅ |
+| 功能覆盖率（covergroup + urg 报告） | ❌ | ✅ |
+| UVM | ❌ | ✅（`$VCS_HOME/etc/uvm`） |
+| 波形给 Verdi 看 | ⚠ 只有 VCD | ✅ FSDB / KDB |
 
-> 结论：**不要为了"写得漂亮"用 interface**。它会让本机唯一可用的仿真器直接编译失败，
-> 而学校服务器上的 DC 综合又需要额外开关。宏头文件是唯一三边都通的选择。
+验证占 30 分，其中"验证充分性"要靠覆盖率说话，这条只有 VCS 能给。所以**单一仿真器：VCS**。
 
-### 需要 SVA / 覆盖率时怎么办
+### 语言子集（写 RTL 时的约束）
 
-- 断言：iverilog 不支持，改写成 `if (cond) $display("FAIL: ..."); $finish;` 的检查块，
-  效果等价，只是不那么优雅。
-- 覆盖率：`tb/cov/` 里用 Python 统计"哪些场景跑过"，配合 `results/` 的表格做成证据，
-  这比 Verdi 的覆盖率报告更贴题（题面要的是六类场景都覆盖，不是行覆盖率数字）。
-- 真需要 UVM/Verdi 波形调试 → 找助教要实验室服务器，或按 `install_guide.pdf` 自己搭 VM。
+宏头文件 + `package` 这套写法在 VCS / Verilator / Genus 上全部通过，已实测。
+仍然建议遵守：
+
+- 端口契约用 `` `ATTN_TOP_PORTS `` 宏，不用 `interface`（Genus 要额外开关，面积容易踩坑）
+- 不用 `'{...}` 赋值模式（可读性收益小于工具兼容风险）
+- 状态机用 `enum`，别用裸 `parameter`（波形里能直接显示状态名）
 
 ---
 

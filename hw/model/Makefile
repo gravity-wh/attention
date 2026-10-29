@@ -20,15 +20,22 @@ SEED    ?= 20260101
 
 BIN     := attn_baseline
 TBIN    := attn_selftest
+VECBIN  := attn_dumpvec
 
 MODEL_SRCS := attn_model.c
 HDRS       := attn_model.h vecgen.h fx.h fp16.h
 
 OUT     := ../results/error_baseline.txt
 
-.PHONY: all test err allrun clean
+.PHONY: all test err allrun clean vecbin
 
 all: $(BIN) $(TBIN)
+
+# 向量导出器：RTL 测试平台的唯一向量来源（见 flow/sim/genvec.sh）
+vecbin: $(VECBIN)
+
+$(VECBIN): dumpvec.c vecgen.c $(MODEL_SRCS) $(HDRS)
+	$(CC) $(CFLAGS) -o $@ dumpvec.c vecgen.c $(MODEL_SRCS) $(LDLIBS)
 
 $(BIN): main.c vecgen.c $(MODEL_SRCS) $(HDRS)
 	$(CC) $(CFLAGS) -o $@ main.c vecgen.c $(MODEL_SRCS) $(LDLIBS)
@@ -47,4 +54,4 @@ err: $(BIN)
 allrun: test err
 
 clean:
-	rm -f $(BIN) $(TBIN) $(BIN).exe $(TBIN).exe
+	rm -f $(BIN) $(TBIN) $(VECBIN) $(BIN).exe $(TBIN).exe $(VECBIN).exe

@@ -7,7 +7,7 @@ variant             qb  qf  lut  category        runs    maxRMSE   max|err| psum
 A  16b lut4         16  13    4  random           200   0.000157   0.000637      4.0         0   yes  PASS
 A  16b lut4         16  13    4  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
 A  16b lut4         16  13    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
-A  16b lut4         16  13    4  cancellation     200   0.000173   0.000600      3.0         0   yes  PASS
+A  16b lut4         16  13    4  cancellation     200   0.000188   0.000619      2.0         0   yes  PASS
 A  16b lut4         16  13    4  reset-recover      4   0.000128   0.000573      4.0         0   yes  PASS
 A  16b lut4         16  13    4  consecutive        8   0.000147   0.000651      3.0         0   yes  PASS
 A  16b lut4         16  13    4  == ALL ==              0.000240   0.000761                           PASS
@@ -15,7 +15,7 @@ A  16b lut4         16  13    4  == ALL ==              0.000240   0.000761     
 A' 16b lut4-noapp   16  13    4  random           200   0.000152   0.000586      4.0         0   yes  PASS
 A' 16b lut4-noapp   16  13    4  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
 A' 16b lut4-noapp   16  13    4  extreme          200   0.000227   0.000685      5.0         0   yes  PASS
-A' 16b lut4-noapp   16  13    4  cancellation     200   0.000166   0.000576      3.0         0   yes  PASS
+A' 16b lut4-noapp   16  13    4  cancellation     200   0.000182   0.000582      2.0         0   yes  PASS
 A' 16b lut4-noapp   16  13    4  reset-recover      4   0.000124   0.000573      2.0         0   yes  PASS
 A' 16b lut4-noapp   16  13    4  consecutive        8   0.000134   0.000581      3.0         0   yes  PASS
 A' 16b lut4-noapp   16  13    4  == ALL ==              0.000227   0.000685                           PASS
@@ -23,41 +23,81 @@ A' 16b lut4-noapp   16  13    4  == ALL ==              0.000227   0.000685     
 B  16b lut2         16  13    2  random           200   0.000883   0.002640      4.0         0   yes  PASS
 B  16b lut2         16  13    2  all-zero           4   0.000073   0.000252      0.0         0   yes  PASS
 B  16b lut2         16  13    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
-B  16b lut2         16  13    2  cancellation     200   0.001166   0.002510      3.0         0   yes  PASS
+B  16b lut2         16  13    2  cancellation     200   0.001133   0.002530      3.0         0   yes  PASS
 B  16b lut2         16  13    2  reset-recover      4   0.000783   0.002200      3.0         0   yes  PASS
 B  16b lut2         16  13    2  consecutive        8   0.000792   0.002470      3.0         0   yes  PASS
 B  16b lut2         16  13    2  == ALL ==              0.001210   0.003597                           PASS
 
-C  12b lut4         12   9    4  random           200   0.000696   0.003439      4.0         0   yes  PASS
-C  12b lut4         12   9    4  all-zero           4   0.000194   0.000435      0.0         0   yes  PASS
-C  12b lut4         12   9    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
-C  12b lut4         12   9    4  cancellation     200   0.004232   0.009538      3.0         0   yes  PASS
-C  12b lut4         12   9    4  reset-recover      4   0.000526   0.002095      2.0         0   yes  PASS
-C  12b lut4         12   9    4  consecutive        8   0.000564   0.001853      3.0         0   yes  PASS
-C  12b lut4         12   9    4  == ALL ==              0.004232   0.009538                           PASS
+C  14b lut4         14  11    4  random           200   0.000167   0.000746      4.0         0   yes  PASS
+C  14b lut4         14  11    4  all-zero           4   0.000075   0.000252      0.0         0   yes  PASS
+C  14b lut4         14  11    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+C  14b lut4         14  11    4  cancellation     200   0.000194   0.000619      2.0         0   yes  PASS
+C  14b lut4         14  11    4  reset-recover      4   0.000146   0.000573      2.0         0   yes  PASS
+C  14b lut4         14  11    4  consecutive        8   0.000162   0.000647      3.0         0   yes  PASS
+C  14b lut4         14  11    4  == ALL ==              0.000240   0.000761                           PASS
 
-D  10b lut4         10   7    4  random           200   0.002118   0.008880      4.0         0   yes  PASS
-D  10b lut4         10   7    4  all-zero           4   0.000637   0.001660      0.0         0   yes  PASS
-D  10b lut4         10   7    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
-D  10b lut4         10   7    4  cancellation     200   0.012376   0.028376      3.0         0   yes  PASS
-D  10b lut4         10   7    4  reset-recover      4   0.001889   0.006034      3.0         0   yes  PASS
-D  10b lut4         10   7    4  consecutive        8   0.001994   0.006814      3.0         0   yes  PASS
-D  10b lut4         10   7    4  == ALL ==              0.012376   0.028376                           PASS
+D  13b lut4         13  10    4  random           200   0.000280   0.001179      4.0         0   yes  PASS
+D  13b lut4         13  10    4  all-zero           4   0.000106   0.000252      0.0         0   yes  PASS
+D  13b lut4         13  10    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+D  13b lut4         13  10    4  cancellation     200   0.000256   0.000675      2.0         0   yes  PASS
+D  13b lut4         13  10    4  reset-recover      4   0.000232   0.000755      3.0         0   yes  PASS
+D  13b lut4         13  10    4  consecutive        8   0.000252   0.000864      3.0         0   yes  PASS
+D  13b lut4         13  10    4  == ALL ==              0.000280   0.001179                           PASS
 
-E   8b lut4          8   5    4  random           200   0.009508   0.044657      4.0         0   yes  PASS
-E   8b lut4          8   5    4  all-zero           4   0.002139   0.005285      0.0         0   yes  PASS
-E   8b lut4          8   5    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
-E   8b lut4          8   5    4  cancellation     200   0.049565   0.119547      3.0         0   yes  PASS
-E   8b lut4          8   5    4  reset-recover      4   0.006861   0.024701      3.0         0   yes  PASS
-E   8b lut4          8   5    4  consecutive        8   0.007892   0.026029      2.0         0   yes  PASS
-E   8b lut4          8   5    4  == ALL ==              0.049565   0.119547                           PASS
+E  12b lut4         12   9    4  random           200   0.000696   0.003439      4.0         0   yes  PASS
+E  12b lut4         12   9    4  all-zero           4   0.000194   0.000435      0.0         0   yes  PASS
+E  12b lut4         12   9    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+E  12b lut4         12   9    4  cancellation     200   0.001012   0.002739      2.0         0   yes  PASS
+E  12b lut4         12   9    4  reset-recover      4   0.000526   0.002095      2.0         0   yes  PASS
+E  12b lut4         12   9    4  consecutive        8   0.000564   0.001853      3.0         0   yes  PASS
+E  12b lut4         12   9    4  == ALL ==              0.001012   0.003439                           PASS
 
-F   8b lut2          8   5    2  random           200   0.009519   0.042704      4.0         0   yes  PASS
-F   8b lut2          8   5    2  all-zero           4   0.002139   0.005285      0.0         0   yes  PASS
-F   8b lut2          8   5    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
-F   8b lut2          8   5    2  cancellation     200   0.049469   0.119669      3.0         0   yes  PASS
-F   8b lut2          8   5    2  reset-recover      4   0.006995   0.026410      4.0         0   yes  PASS
-F   8b lut2          8   5    2  consecutive        8   0.008015   0.028349      3.0         0   yes  PASS
-F   8b lut2          8   5    2  == ALL ==              0.049469   0.119669                           PASS
+F  12b lut3         12   9    3  random           200   0.000718   0.003059      4.0         0   yes  PASS
+F  12b lut3         12   9    3  all-zero           4   0.000194   0.000435      0.0         0   yes  PASS
+F  12b lut3         12   9    3  extreme          200   0.000366   0.001249      5.0         0   yes  PASS
+F  12b lut3         12   9    3  cancellation     200   0.001032   0.002495      2.0         0   yes  PASS
+F  12b lut3         12   9    3  reset-recover      4   0.000576   0.002044      3.0         0   yes  PASS
+F  12b lut3         12   9    3  consecutive        8   0.000605   0.001912      3.0         0   yes  PASS
+F  12b lut3         12   9    3  == ALL ==              0.001032   0.003059                           PASS
+
+G  12b lut2         12   9    2  random           200   0.001094   0.004729      4.0         0   yes  PASS
+G  12b lut2         12   9    2  all-zero           4   0.000194   0.000435      0.0         0   yes  PASS
+G  12b lut2         12   9    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
+G  12b lut2         12   9    2  cancellation     200   0.001655   0.003891      3.0         0   yes  PASS
+G  12b lut2         12   9    2  reset-recover      4   0.000943   0.002861      3.0         0   yes  PASS
+G  12b lut2         12   9    2  consecutive        8   0.000925   0.002977      3.0         0   yes  PASS
+G  12b lut2         12   9    2  == ALL ==              0.001655   0.004729                           PASS
+
+H  11b lut3         11   8    3  random           200   0.001271   0.005330      4.0         0   yes  PASS
+H  11b lut3         11   8    3  all-zero           4   0.000330   0.000830      0.0         0   yes  PASS
+H  11b lut3         11   8    3  extreme          200   0.000366   0.001249      5.0         0   yes  PASS
+H  11b lut3         11   8    3  cancellation     200   0.002184   0.004991      3.0         0   yes  PASS
+H  11b lut3         11   8    3  reset-recover      4   0.001079   0.003748      2.0         0   yes  PASS
+H  11b lut3         11   8    3  consecutive        8   0.001052   0.003517      4.0         0   yes  PASS
+H  11b lut3         11   8    3  == ALL ==              0.002184   0.005330                           PASS
+
+I  10b lut4         10   7    4  random           200   0.002118   0.008880      4.0         0   yes  PASS
+I  10b lut4         10   7    4  all-zero           4   0.000637   0.001660      0.0         0   yes  PASS
+I  10b lut4         10   7    4  extreme          200   0.000240   0.000761      5.0         0   yes  PASS
+I  10b lut4         10   7    4  cancellation     200   0.003884   0.008730      3.0         0   yes  PASS
+I  10b lut4         10   7    4  reset-recover      4   0.001889   0.006034      3.0         0   yes  PASS
+I  10b lut4         10   7    4  consecutive        8   0.001994   0.006814      3.0         0   yes  PASS
+I  10b lut4         10   7    4  == ALL ==              0.003884   0.008880                           PASS
+
+J  10b lut3         10   7    3  random           200   0.002158   0.009176      4.0         0   yes  PASS
+J  10b lut3         10   7    3  all-zero           4   0.000637   0.001660      0.0         0   yes  PASS
+J  10b lut3         10   7    3  extreme          200   0.000366   0.001249      5.0         0   yes  PASS
+J  10b lut3         10   7    3  cancellation     200   0.003735   0.008247      2.0         0   yes  PASS
+J  10b lut3         10   7    3  reset-recover      4   0.001889   0.005881      3.0         0   yes  PASS
+J  10b lut3         10   7    3  consecutive        8   0.002004   0.006692      4.0         0   yes  PASS
+J  10b lut3         10   7    3  == ALL ==              0.003735   0.009176                           PASS
+
+K   8b lut2          8   5    2  random           200   0.009519   0.042704      4.0         0   yes  PASS
+K   8b lut2          8   5    2  all-zero           4   0.002139   0.005285      0.0         0   yes  PASS
+K   8b lut2          8   5    2  extreme          200   0.001210   0.003597      5.0         0   yes  PASS
+K   8b lut2          8   5    2  cancellation     200   0.015579   0.030344      3.0         0   yes  PASS
+K   8b lut2          8   5    2  reset-recover      4   0.006995   0.026410      4.0         0   yes  PASS
+K   8b lut2          8   5    2  consecutive        8   0.008015   0.028349      3.0         0   yes  PASS
+K   8b lut2          8   5    2  == ALL ==              0.015579   0.042704                           PASS
 
 # 汇总：0 个 (variant,category) 组合未通过

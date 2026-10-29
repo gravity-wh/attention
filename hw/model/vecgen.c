@@ -153,18 +153,22 @@ static int hadamard_sign(int i, int k)
 static void gen_cancel(mat_in_t *m, int idx)
 {
     if (idx % 2) {
-        /* (b) 近并行 K 行 */
+        /* (b) 近并行 K 行
+         * 关键：k 的每一列都要有自己的独立抖动 (1+0.06ε_jk)。
+         * 早期版本只给整行一个公共幅度 amp_j，导致 δamp_j 被 16 个乘积累加放大
+         * 成一个公共偏移——量化误差高度相关，误差随 qf 的曲线在 qf=10 处
+         * 出现 16 倍的假台阶。加抖动后误差解相关，曲线恢复 2 倍/bit 的规律。 */
         int u[ATTN_MX];
         for (int k = 0; k < ATTN_MX; k++) u[k] = (rng_next() & 1) ? 1 : -1;
 
         for (int i = 0; i < ATTN_MX; i++)
             for (int k = 0; k < ATTN_MX; k++)
                 m->q[i][k] = as_fp16(u[k] * urange(1.6, 2.0));
-        /* K 行 = 同一个 u 乘不同幅度，符号再交替，制造行间差异 */
+
         for (int j = 0; j < ATTN_MX; j++) {
             double amp = ((j & 1) ? -1.0 : 1.0) * urange(1.6, 2.0);
             for (int k = 0; k < ATTN_MX; k++)
-                m->k[j][k] = as_fp16(u[k] * amp);
+                m->k[j][k] = as_fp16(u[k] * amp * (1.0 + 0.06 * (2.0 * u01() - 1.0)));
         }
     } else {
         /* (a) Hadamard 正交 */
