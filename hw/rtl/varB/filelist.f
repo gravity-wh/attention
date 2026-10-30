@@ -1,5 +1,9 @@
 // =====================================================================
-//  方案 varB —— 方案 B —— 脉动阵列 + 在线 Softmax
+//  方案 varB —— 方案 B —— 行融合（不存 S/P 全矩阵）+ 4 lane 并行
+//
+//  与 varA 的差异只有"全矩阵展开 vs 行融合"这一件事：lane 数同为 4，
+//  数值格式同为 qb10/qf7，softmax 的行内顺序一字未改。
+//  这样 varA ↔ varB 的对比才是单变量对照。
 //
 //  这份 filelist 同时是「仿真」和「综合」的唯一输入。
 //  路径约定：全部相对 hw/ 目录（所有流程都在 hw/ 下执行）
@@ -28,5 +32,4 @@ rtl/core/fix2fp16.sv
 rtl/core/recip_unit.sv
 
 // ---- 3. 本方案独有 ----
-// rtl/varB/top_varB.sv
-// rtl/varB/systolic_engine.sv（脉动阵列 + 在线归一化）
+rtl/varB/top_varB.sv
