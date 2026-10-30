@@ -23,6 +23,16 @@ import os
 import re
 import sys
 
+# ⚠ locale 是 C/POSIX 时 Python3 的 stdout 编码是 ASCII，任何一句中文 print
+# 都会抛 UnicodeEncodeError（实测：varA 首轮综合就死在这里，而真正的病
+# ——取数全空——被这个编码异常盖住了）。这里强制 UTF-8，让"取不到数"这件事
+# 能以它本来的面目报出来。run_syn.sh 里也 export 了 PYTHONIOENCODING 双保险。
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 FATAL_KEYS = ("area_um2",)          # 缺了这些数，这次综合没有意义
 
 
@@ -211,8 +221,20 @@ def main():
             f.write("%s,%s\n" % (k, v))
 
     # ---------------- 人看的总结 ----------------
+    # 一项都没解析出来时，必须把报告原文的头打出来：否则只能看到"指标 MISSING"，
+    # 而不知道是报告没生成、格式变了、还是单位变了。
+    if not src:
+        print("[syn] ✗ 报告文本一个都没解析出来，下面打出各报告前 25 行供定位：")
+        for nm, txt in (("qor.rpt", qor_rpt), ("area.rpt", area_rpt),
+                        ("timing.rpt", tim_rpt), ("power.rpt", pwr_rpt)):
+            print("[syn] ---- %s（共 %d 字节）----" % (nm, len(txt or "")))
+            if not txt:
+                print("[syn]   （空或读不到）")
+                continue
+            for ln in (txt or "").splitlines()[:25]:
+                print("[syn]   %s" % ln)
     print("[syn] ------ 解析结果（来源：%s）------" %
-          (", ".join("%s←%s" % (k, v) for k, v in src.items()) or "报告文本"))
+          (", ".join("%s<-%s" % (k, v) for k, v in src.items()) or "全部 MISSING"))
     print("[syn] 面积      : %s um^2 = %.4f mm^2（单元 %s + 线网 %s）"
           % (fmt(area), (area or 0) / 1e6, fmt(cell_area), fmt(net_area)))
     print("[syn] 单元/寄存器: %s / %s" % (row[8][1], row[9][1]))

@@ -138,6 +138,9 @@ echo "[syn] 事后 $OUT 内容:"; ls -la "$OUT" 2>&1 | sed 's/^/    /'
 grep -q "\[syn\] DONE" "$OUT/syn.log" || die "genus 未跑到结束（见 $OUT/syn.log 末尾）"
 
 # ------------------------------------------------------------------ 6. 解析指标
+# PYTHONIOENCODING：客户机 locale 是 C，Python3 的 stdout 会按 ASCII 编码，
+# 脚本里任何一句中文 print 都会抛 UnicodeEncodeError 并盖掉真正的错误。
+export PYTHONIOENCODING=utf-8
 python3 flow/synth/parse_syn.py "$OUT" "$CLK_MHZ" "$PVT_TAG" "$VARIANT" "$TOP" \
   || die "指标解析失败（见 $OUT/syn.log）"
 

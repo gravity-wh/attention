@@ -49,7 +49,12 @@ CM_RUN=""
 
 echo "[run] $VARIANT/$CAT  n=$N  seed=$SEED  vec=$VECDIR  cfg=$CFGTAG"
 
-"$SIMV" \
+# ⚠ 必须加 timeout。实测踩过一次：某一类激励让 DUT 卡在中间状态，tb 的
+#   TIMEOUT=200000 拍兜底要跑满，而 -debug_access+all -kdb 下那 40 万拍能跑
+#   二十分钟以上 —— 单类卡死就把整轮回归拖住，还占着 license。
+#   正常一类 2~5 秒，给 300 秒是 60 倍余量；超了就是真有问题，判 FAIL。
+SIM_TIMEOUT=${SIM_TIMEOUT:-300}
+timeout -k 10 "$SIM_TIMEOUT" "$SIMV" \
     +VECDIR="$VECDIR" \
     +CFG="$CFGTAG" \
     +CAT="$CAT" \
@@ -58,6 +63,13 @@ echo "[run] $VARIANT/$CAT  n=$N  seed=$SEED  vec=$VECDIR  cfg=$CFGTAG"
     $CM_RUN \
     -l "$LOG" 2>&1 | tee "$LOG.stdout" | grep -vE '^$'
 RC=${PIPESTATUS[0]}
+
+if [ "$RC" -eq 124 ] || [ "$RC" -eq 137 ]; then
+    echo "✗ 仿真超时（${SIM_TIMEOUT}s）—— DUT 大概率卡在中间状态没回到 S_IDLE。"
+    echo "  看 $LOG 末尾；这类问题不会自己好，别重跑碰运气。"
+    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,-1,-1,-1,TIMEOUT" >> "$RUN/summary.csv"
+    exit 1
+fi
 
 # ---- 准备阶段异常（向量缺失、文件不完整）先单独报，别混进 PASS/FAIL 统计 ----
 if grep -q '^\[FATAL\]' "$LOG" 2>/dev/null; then
