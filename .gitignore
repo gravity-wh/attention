@@ -97,3 +97,6 @@ desktop.ini
 # ---- 本机环境说明：含主机口令与内网拓扑，公开库不得收录 ----
 # 需要版本化的话，先脱敏（口令/账号/IP 换成占位符）再挪进 docs/。
 README-ICdesign-Transform.md
+
+# ---- VCS UCLI 交互密钥（仿真时自动生成）----
+ucli.key
