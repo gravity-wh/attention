@@ -45,6 +45,14 @@ proc main {} {
 
     file mkdir $out
 
+    # 并行映射进程数：必须限流。本 VM 只有 7 GB 内存，8 线程超线程映射
+    # 7.5 万单元的 ref，会在 technology mapping 阶段被内核 OOM killer
+    # SIGKILL —— 表现是 genus 无声退出，目录里只剩 constraints.sdc /
+    # filelist.clean.f / syn.log，一份报告都没有，极易误判成"脚本没跑"。
+    set cpus [expr {[info exists ::env(SYN_CPUS)] ? $::env(SYN_CPUS) : 4}]
+    set_db max_cpus_per_server $cpus
+    puts "\[syn\] max_cpus_per_server=$cpus（SYN_CPUS，默认 4）"
+
     puts "\[syn\] top=$top  lib=$lib"
     puts "\[syn\] lef=$lef"
     puts "\[syn\] cfg=qb${qb}qf${qf} lut=$lut"

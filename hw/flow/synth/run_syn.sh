@@ -125,10 +125,16 @@ echo "[syn] 事前 $OUT 内容:"; ls -la "$OUT" | sed 's/^/    /'
 # 数值格式同理：Makefile 导出的是 QB/QF/LUT，Tcl 侧统一叫 SYN_QB/QF/LUT，
 # 名字对不上时 tcl 会报 "can't read env(...)" 然后掉进交互模式——
 # 表现是"综合卡住不返回"，比报错更难查，所以这里一次都对齐。
+# 并行映射进程数。7 GB 的 VM 上 8 线程会被内核 OOM killer 杀掉（见 syn.tcl
+# 注释），默认限到 4；内存更大的机器可 make syn SYN_CPUS=8 调高。
+# 注意：退出码拿不到 SIGKILL 的真正原因，所以这里把它写进日志便于事后定位。
+SYN_CPUS=${SYN_CPUS:-4}
+
 export SYN_TOP="$TOP" SYN_FLIST="$PWD/$OUT/filelist.clean.f" SYN_OUT="$PWD/$OUT" \
        SYN_CLK_NS="$CLK_NS" SYN_IODLY_NS="$IODLY_NS" SYN_UNC_NS="$UNC_NS" \
        SYN_IO_DELAY_NS="$IODLY_NS" SYN_CLK_UNCERT_NS="$UNC_NS" \
-       SYN_QB="$QB" SYN_QF="$QF" SYN_LUT="$LUT"
+       SYN_QB="$QB" SYN_QF="$QF" SYN_LUT="$LUT" SYN_CPUS="$SYN_CPUS"
+echo "[syn] 并行映射进程数 SYN_CPUS=$SYN_CPUS"
 ( cd "$PWD" && genus -no_gui -files flow/synth/syn.tcl ) 2>&1 | tee "$OUT/syn.log"
 GEN_RC=${PIPESTATUS[0]}
 
