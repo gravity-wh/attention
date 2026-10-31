@@ -76,8 +76,15 @@ def emit(rows, cols, title, note):
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit("用法: make_table.py <metrics.csv>")
+        sys.exit("用法: make_table.py <metrics.csv> [PDK]")
     rows = load(sys.argv[1])
+    # 可选第二个参数：只保留该 PDK 的行。
+    # 两种工艺的面积口径不同（SMIC40 的 .lib 带真实面积且不读 LEF，net 面积为 0；
+    # GPDK045 必须读 LEF 才有面积），混在一张表里比值会失真，所以按工艺分开出表。
+    if len(sys.argv) > 2 and sys.argv[2]:
+        pdk = sys.argv[2]
+        rows = [r for r in rows if (r.get("pdk") or "") == pdk]
+        print("<!-- 仅显示 PDK=%s 的结果 -->" % pdk)
     if not rows:
         sys.exit("✗ metrics.csv 是空的 —— 先跑 make syn / make regress，再 make collect")
 

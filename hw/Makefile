@@ -241,9 +241,12 @@ pnr: check
 collect:
 	PYTHONIOENCODING=utf-8 $(PY) flow/collect/collect.py runs/ results/metrics.csv
 
+# TABLE_PDK=SC9MC 可只出单一工艺的表；TABLE_OUT 可换输出文件。
+TABLE_OUT ?= results/tables.md
+TABLE_PDK ?=
 table:
-	PYTHONIOENCODING=utf-8 $(PY) flow/collect/make_table.py results/metrics.csv > results/tables.md
-	@echo "-> results/tables.md"
+	PYTHONIOENCODING=utf-8 $(PY) flow/collect/make_table.py results/metrics.csv $(TABLE_PDK) > $(TABLE_OUT)
+	@echo "-> $(TABLE_OUT)"
 
 # ---------------- 5. 可复现清单 ----------------
 manifest: check
