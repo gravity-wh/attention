@@ -10,8 +10,10 @@
 #    2. 生成 SDC 与清洗后的 filelist（filelist 里的 // 注释和 .svh 会让
 #       Genus 的 -f 解析出问题；仿真器能吃，不代表综合器能吃）
 #    3. 调 Genus，日志落 runs/<TAG>/syn/syn.log
-#    4. 解析指标 + **校验面积非零**。库是演示库，面积只能来自 LEF；
-#       LEF 没读到就会静默报 0，0 面积混进报告表等于造假。
+#    4. 解析指标 + **校验面积非零**。面积来源分两类（由 pdk.mk 的 phys_<PDK> 决定）：
+#       0 → 面积从 .lib 的 area 字段取（SMIC40LL，且 LEF 是 macro-only 不读）
+#       1 → 面积从 LEF 的 SIZE 补（GPDK045，.lib 里 area 全是 0）
+#       无论哪类，总面积 == 0 都说明面积来源没生效，0 面积混进报告表等于造假。
 #
 #  产出（都在 runs/<TAG>/syn/ 下）：
 #    constraints.sdc  filelist.clean.f  syn.log  area.rpt  timing.rpt
@@ -33,7 +35,7 @@ command -v genus >/dev/null || die "找不到 genus（综合在 VM 上跑：用 
 [ -n "${SYN_LEF:-}" ] || die "SYN_LEF 未设置 —— 检查 config/pdk.mk 的 include"
 [ -f "$SYN_LIB" ] || die "时序库不存在: $SYN_LIB
      VM 上的路径才对；在 Windows 侧跑必然找不到。用 runvm.sh 执行。"
-[ -f "$SYN_LEF" ] || die "LEF 不存在: $SYN_LEF（没有 LEF 就拿不到单元面积）"
+[ -f "$SYN_LEF" ] || die "LEF 不存在: $SYN_LEF（GPDK045 这类库靠 LEF 补面积；SMIC40LL 虽不 read_physical，LEF 仍应随库交付，缺失即异常）"
 [ -n "${TOP:-}" ] || die "TOP 未设置"
 [ -f "${FLIST:?}" ] || die "filelist 不存在: $FLIST"
 case "$CLK_MHZ" in ''|*[!0-9.]*) die "CLOCK 不是数字: $CLK_MHZ";; esac
@@ -152,12 +154,16 @@ python3 flow/synth/parse_syn.py "$OUT" "$CLK_MHZ" "$PVT_TAG" "$VARIANT" "$TOP" \
   || die "指标解析失败（见 $OUT/syn.log）"
 
 # ------------------------------------------------------------------ 7. 体检
-# 面积必须非零。库的 .lib 里 area 全是 0，唯一来源是 LEF；
-# 这一项为 0 说明 read_physical 没生效，此时任何"面积改善"都是假的。
+# 面积必须非零。面积来源分两类（phys_<PDK>）：
+#   SC9MC 等 phys=0 的库——面积来自 .lib 的 area 字段，这一项为 0 说明
+#     lib 没读对或 .lib 本身没带面积；
+#   GPDK045 等 phys=1 的库——面积来自 LEF 的 SIZE，这一项为 0 说明
+#     read_physical -lef 没生效。
+# 无论哪类，0 面积混进报告表就等于造假"面积改善了 ∞ 倍"。
 AREA=$(awk -F, '$1=="area_um2"{print $2}' "$OUT/metrics.csv")
 awk -v a="$AREA" 'BEGIN{exit !(a+0 > 0)}' \
-  || die "总面积 = ${AREA:-0} µm² —— read_physical -lef 没生效。
-     库的 .lib 里单元 area 全为 0.0，面积只能来自 LEF。
-     检查 $SYN_LEF 是否存在、Genus 是否支持该 LEF 版本。"
+  || die "总面积 = ${AREA:-0} µm² —— 面积来源没生效（phys_SYN_PHYS=${SYN_PHYS:-1}）。
+     phys=0：检查 $SYN_LIB 是否读对、.lib 是否带真实 area；
+     phys=1：检查 $SYN_LEF 是否存在、Genus 是否支持该 LEF 版本。"
 
 echo "[syn] ✓ 完成：$(cat "$OUT/metrics.csv")"

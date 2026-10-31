@@ -5,31 +5,39 @@
 #  三个地方。任何一处手写库路径，都会在换角/换库时漏改一处，而漏改的后果
 #  不是报错，是"两个方案用了不同的库却没人发现"—— 那 40 分的效率对比直接作废。
 #
-#  ── 本机可用的库（2026-10-29 实测）─────────────────────────────────
-#  VM 上装了 Cadence Genus 15.2，工具自带两套 45nm 标准单元库：
-#    A. GPDK045：$INNOVUS/share/FoundationFlows/EXAMPLES/INNOVUS/DESIGN/GPDK
-#       · timing/{typical,fast,slow}.lib —— 三个角齐全，477 个单元
-#       · gsclib045.lef —— 487 个 MACRO，单元高度 1.71 µm
-#    B. gsclib045_v3.5（$CONFRML/share/cfm/lec/demo/...）：同一套单元的
-#       原始版，只有 slow 一个角，但带 lef/ 和 macro_libs/（SRAM）。
-#  两套的单元名完全一致（GPDK045 就是 gsclib045 的再表征版），选 A：三个角。
+#  ── 本机可用的库（2026-10-29 实测，2026-10-31 起 SC9MC 为默认）──────
+#  VM 上装了两套可综合的标准单元库：
+#
+#  ★ 默认 PDK：SMIC 40LL（sc9mc base RVT c40，r1p1）—— 真实可流片 40nm 库。
+#    · lib/{tt,ss,ff} —— 三个角齐全（1.10 / 0.99 / 1.21 V）
+#    · lef/sc9mc_..._base_rvt_c40.lef —— 487 个 MACRO，含真实 SIZE
+#    · verilog/sc9mc_....v —— 单元行为模型，**可做门级仿真**（GPDK045 没有）
+#    · voltagestorm/*/qrcTechFile_RCgen —— 每角一份寄生提取文件（P&R 用）
+#    · **面积来自 .lib 的真实 area 字段**（与 LEF 的 SIZE 一致），所以
+#      phys_SC9MC := 0，综合时跳过 read_physical（详见下方 phys_ 说明）。
+#    综合路径已验证跑通（RC=0、WNS=0），是报告里"后端数字"的权威来源。
+#
+#  保留库：GPDK045（45nm 预测性教学库，Cadence 随 Innovus 发布）
+#    · 三个角齐全，但 `.lib` 里所有单元 area 全是 0.0（演示库被剥掉面积字段），
+#      面积只能从 LEF 的 SIZE 补（phys_GPDK045 := 1），且无 Verilog 模型，
+#      做不了门级仿真。**仅作为早期快速迭代的备选**，不再用于正式报告。
+#    注意：同一套单元还有个 gsclib045_v3.5（原始版，只有 slow 角），已弃用。
 #
 #  ⚠️ 两个必须知道的坑
-#  1. **两个库的 .lib 里所有单元 area 都是 0.0**（演示库被剥掉了面积字段）。
-#     只读 .lib 的话 Genus 会把总面积报成 0，而 0 面积会一路混进报告表 2，
-#     表现是"面积改善了 ∞ 倍"。所以流程必须 read_physical -lef 把面积补回来，
-#     并在总面积 == 0 时直接报错退出。见 flow/synth/run_syn.sh 的 fsck。
-#  2. **电压不是 0.9V**。GPDK045 三个角分别是 1.20 / 1.32 / 1.08 V。
-#     之前 variants.mk 里写的 tt_25C_0.90V 是占位符，照它填报告会与库不符。
-#     动态功耗 ∝ V²，标错电压等于把功耗数字整体错 ~78%，必须改。
+#  1. **库的「面积来源」不同**（见下方 phys_ 段）：GPDK045 必须 read_physical
+#     -lef 补面积，SC9MC 直接读 .lib。选错要么面积全 0、要么综合直接失败。
+#  2. **电压不是 0.9V**。SC9MC 三角是 1.10 / 0.99 / 1.21 V；GPDK045 是
+#     1.20 / 1.32 / 1.08 V。variants.mk 里曾写过的 tt_25C_0.90V 是占位符。
+#     动态功耗 ∝ V²，标错电压会把功耗数字整体错一大截，必须按库填。
 #
 #  ── 换工艺时要改哪里 ──────────────────────────────────────────────
-#  只需要在本文件加一段 `lib_<corner>_<PDK>` / `lef_<PDK>` / `pvt_<corner>_<PDK>`，
-#  然后 `make syn PDK=<新库>`。其余脚本一律不写库路径。
+#  只需要在本文件加一段 `lib_<corner>_<PDK>` / `lef_<PDK>` / `pvt_<corner>_<PDK>`
+#  / `phys_<PDK>` / `drive_<PDK>`，然后 `make syn PDK=<新库>`。
+#  其余脚本一律不写库路径。
 # =====================================================================
 
 # ---- 工艺库选择 -------------------------------------------------------
-PDK    ?= GPDK045
+PDK    ?= SC9MC
 CORNER ?= tt
 # CORNER: tt（典型，签核用）/ ff（最快，查 hold 与短路功耗）/ ss（最慢，查 setup）
 
@@ -48,10 +56,10 @@ pvt_ff_GPDK045 := FF_0C_1V32
 pvt_ss_GPDK045 := SS_125C_1V08
 
 # ---- SMIC 40LL（真实商用工艺，sc9mc base RVT c40）---------------------
-# 与 GPDK045 的本质区别：这是可流片的真库。LEF 里带真实 SIZE，.lib 里
-# cell area 与 LEF 对得上（BUFH_X4M_A9TR40：1.52×1.26 = 1.9152 µm²，两边一致），
-# 所以面积/延迟/功耗都对应真实工艺。GPDK045 是预测性 PDK，数字不代表任何
-# 可制造的工艺 —— 报告里"后端数字"一律用本库，GPDK045 只用于早期快速迭代。
+# 默认 PDK。与 GPDK045 的本质区别：这是可流片的真库。LEF 里带真实 SIZE，
+# .lib 里 cell area 与 LEF 对得上（BUFH_X4M_A9TR40：1.52×1.26 = 1.9152 µm²，
+# 两边一致），所以面积/延迟/功耗都对应真实工艺。GPDK045 是预测性 PDK，
+# 数字不代表任何可制造的工艺 —— 只作为早期快速迭代的备选，正式报告用本库。
 SC9MC_DIR := /opt/cadence/PDK/smic40/sc9mc_base_rvt_c40/r1p1
 
 lib_tt_SC9MC := $(SC9MC_DIR)/lib/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.lib

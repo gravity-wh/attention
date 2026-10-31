@@ -9,9 +9,11 @@
 #    SYN_TOGGLE_RATE / SYN_STATIC_PROB
 #
 #  ── 三个设计决定 ──────────────────────────────────────────────────
-# 1. **必须先 read_physical -lef**。GPDK045/gsclib045 的 .lib 里单元
-#    area 全是 0.0（演示库被剥掉了面积字段）。不读 LEF 的话总面积报 0，
-#    而 0 面积会一路混进报告表 2，表现为"面积改善无穷倍"。
+# 1. **面积来源分两类**（由 pdk.mk 的 phys_<PDK> 经 SYN_PHYS 传下来）：
+#    GPDK045（phys=1）：.lib 里单元 area 全是 0.0，面积只能从 LEF 的 SIZE 补，
+#      必须 read_physical -lef，否则总面积报 0（0 面积混进表 2 = 造假）。
+#    SMIC40LL（phys=0）：.lib 自带真实面积，但 LEF 是 macro-only（无工艺层 RC），
+#      强行 read_physical 会报 PHYS-10，所以跳过、直接读 .lib。
 # 2. **面积/时序/功耗三个数全部落成文件**，再由 run_syn.sh 统一解析。
 #    不靠人眼抄屏幕，是"报告数字可追溯到原始报告"的前提。
 # 3. **整个流程包在 proc 里 + catch**。不包的话，中途任何一句报错都会让
