@@ -208,6 +208,31 @@ synall:
 	  $(MAKE) --no-print-directory syn VARIANT=$(VARIANT) TAG=$(TAG)-$$c CORNER=$$c || exit 1; \
 	done
 
+# ---------------- 3.5 布局布线（Innovus）----------------
+# tech LEF 不是 PDK 交付物，要从 ASCII techfile 生成（见 flow/pnr/gen_techlef.sh），
+# 生成物受 PDK 授权约束、不进库，所以路径可覆盖。
+TECH_LEF ?= $(PWD)/work_techlef/smic40_tech.lef
+PNR_OUT  ?= runs/$(TAG)/pnr
+
+pnr: check
+	@test -n "$(qrc_tt_$(PDK))" || { \
+	  echo "✗ PDK=$(PDK) 没有 qrc_tt_ 定义 —— 该工艺不支持寄生提取，P&R 无意义"; exit 1; }
+	@test -f $(TECH_LEF) || { \
+	  echo "✗ 缺 tech LEF: $(TECH_LEF)"; \
+	  echo "  先跑： bash flow/pnr/gen_techlef.sh $(dir $(TECH_LEF))"; exit 1; }
+	@test -f $(RUN)/syn/netlist.v || { \
+	  echo "✗ 缺综合网表: $(RUN)/syn/netlist.v —— 先 make syn VARIANT=$(VARIANT) TAG=$(TAG) PDK=$(PDK)"; exit 1; }
+	@test -f $(RUN)/syn/netlist.sdc || { \
+	  echo "✗ 缺约束: $(RUN)/syn/netlist.sdc —— 综合必须成功导出 sdc"; exit 1; }
+	PNR_TECH_LEF=$(TECH_LEF) PNR_CELL_LEF=$(SYN_LEF) \
+	PNR_NETLIST=$(RUN)/syn/netlist.v PNR_TOP=$(TOP) PNR_OUT=$(PNR_OUT) \
+	PNR_MMMC=$(PWD)/flow/pnr/mmmc.tcl \
+	PNR_LIB_TT=$(lib_tt_$(PDK)) PNR_LIB_SS=$(lib_ss_$(PDK)) PNR_LIB_FF=$(lib_ff_$(PDK)) \
+	PNR_QRC_TT=$(qrc_tt_$(PDK)) PNR_QRC_SS=$(qrc_ss_$(PDK)) PNR_QRC_FF=$(qrc_ff_$(PDK)) \
+	PNR_SDC=$(RUN)/syn/netlist.sdc \
+	bash flow/pnr/run_pnr.sh
+	@$(MAKE) --no-print-directory manifest
+
 # ---------------- 4. 结果汇总（复现分的关键）----------------
 # PYTHONIOENCODING：客户机 locale 是 C 时 Python3 的 stdout 是 ASCII 编码，
 # 脚本里任何一句中文 print 都抛 UnicodeEncodeError —— 而且是在写完 csv 之后的
