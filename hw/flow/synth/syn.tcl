@@ -60,8 +60,17 @@ proc main {} {
     # ------------------------------------------------------------ 库
     read_libs $lib
 
-    # 面积来源：LEF。没有这一步，所有 cell 的 area 都是 0。
-    read_physical -lef $lef
+    # 面积来源：分两种情况（由 pdk.mk 的 phys_<PDK> 决定，经 SYN_PHYS 传下来）
+    #   SYN_PHYS=1：.lib 里 cell area 全是 0，面积只能从 LEF 的 SIZE 拿
+    #               （GPDK045 属于这类，不读 LEF 总面积会报 0）
+    #   SYN_PHYS=0：.lib 自带真实面积，且 LEF 是 macro-only（无工艺层 RC，
+    #               读它必报 "no capacitance, resistance specified [PHYS-10]"）
+    #               —— SMIC40LL 属于这类。
+    if {[info exists ::env(SYN_PHYS)] && $::env(SYN_PHYS) == 0} {
+        puts "\[syn\] SYN_PHYS=0：跳过 read_physical，面积取 .lib 的 area 字段"
+    } else {
+        read_physical -lef $lef
+    }
 
     # ------------------------------------------------------------ RTL
     # 数值格式的三个宏由 run_syn.sh 以 +define+ 写进 filelist.clean.f：

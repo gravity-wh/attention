@@ -47,10 +47,46 @@ pvt_tt_GPDK045 := TT_25C_1V20
 pvt_ff_GPDK045 := FF_0C_1V32
 pvt_ss_GPDK045 := SS_125C_1V08
 
+# ---- SMIC 40LL（真实商用工艺，sc9mc base RVT c40）---------------------
+# 与 GPDK045 的本质区别：这是可流片的真库。LEF 里带真实 SIZE，.lib 里
+# cell area 与 LEF 对得上（BUFH_X4M_A9TR40：1.52×1.26 = 1.9152 µm²，两边一致），
+# 所以面积/延迟/功耗都对应真实工艺。GPDK045 是预测性 PDK，数字不代表任何
+# 可制造的工艺 —— 报告里"后端数字"一律用本库，GPDK045 只用于早期快速迭代。
+SC9MC_DIR := /opt/cadence/PDK/smic40/sc9mc_base_rvt_c40/r1p1
+
+lib_tt_SC9MC := $(SC9MC_DIR)/lib/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.lib
+lib_ss_SC9MC := $(SC9MC_DIR)/lib/sc9mc_logic0040ll_base_rvt_c40_ss_typical_max_0p99v_125c.lib
+lib_ff_SC9MC := $(SC9MC_DIR)/lib/sc9mc_logic0040ll_base_rvt_c40_ff_typical_min_1p21v_m40c.lib
+lef_SC9MC    := $(SC9MC_DIR)/lef/sc9mc_logic0040ll_base_rvt_c40.lef
+
+# PVT 标签必须与 .lib 里的 nom_voltage / nom_temperature 一致（可核查的事实）
+pvt_tt_SC9MC := TT_25C_1V10
+pvt_ss_SC9MC := SS_125C_0V99
+pvt_ff_SC9MC := FF_M40C_1V21
+
+# 寄生提取：Innovus 用 qrcTechFile 做真实 RC 提取（每角一份）
+qrc_tt_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.cl/qrcTechFile_RCgen
+qrc_ss_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_ss_typical_max_0p99v_125c.cl/qrcTechFile_RCgen
+qrc_ff_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_ff_typical_min_1p21v_m40c.cl/qrcTechFile_RCgen
+
+# 门级仿真的单元行为模型（GPDK045 没有这份，所以那边做不了门级仿真）
+verilog_SC9MC := $(SC9MC_DIR)/verilog/sc9mc_logic0040ll_base_rvt_c40.v
+
+# 是否需要 read_physical -lef 来补面积。
+#   GPDK045=1：它的 .lib 里 cell area 全为 0.0，面积只能从 LEF 的 SIZE 拿。
+#   SC9MC=0  ：.lib 自带真实面积（BUFH_X4M_A9TR40 = 1.9152 µm²，与 LEF 的
+#              1.52×1.26 一致），而它的 LEF 是 macro-only（LAYER 段为 0，
+#              不带工艺层 RC），强行 read_physical 会报
+#              "There is no capacitance, resistance specified [PHYS-10]"。
+# 换 PDK 时先确认新库属于哪一类：选错要么面积全 0，要么综合直接失败。
+phys_GPDK045 := 1
+phys_SC9MC   := 0
+
 # ---- 派生（下游一律用这三个变量，不要直接引用上面的长路径）------------
-SYN_LIB := $(lib_$(CORNER)_$(PDK))
-SYN_LEF := $(lef_$(PDK))
-PVT     := $(pvt_$(CORNER)_$(PDK))
+SYN_LIB  := $(lib_$(CORNER)_$(PDK))
+SYN_LEF  := $(lef_$(PDK))
+SYN_PHYS := $(phys_$(PDK))
+PVT      := $(pvt_$(CORNER)_$(PDK))
 
 # =====================================================================
 #  综合约束参数
@@ -61,7 +97,11 @@ PVT     := $(pvt_$(CORNER)_$(PDK))
 
 # 输入驱动单元：用库里的中速缓冲器，而不是 ideal 驱动。
 # 用 ideal 会让输入转换时间为 0，路径延迟偏乐观，方案间差异也被抹平。
-SYN_DRIVE_CELL ?= BUFX4
+# ⚠ 单元名是库专属的：GPDK045 叫 BUFX4，SMIC40LL 叫 BUFH_X4M_A9TR40，
+#   换 PDK 而忘了换这个，Genus 会直接报 "cell not found" 或者静默用 ideal drive。
+drive_GPDK045 := BUFX4
+drive_SC9MC   := BUFH_X4M_A9TR40
+SYN_DRIVE_CELL ?= $(drive_$(PDK))
 
 # 输出负载（pF）。16fF ≈ 一个扇出 2 的门 + 一小段线；综合阶段没有布线信息，
 # 这个值只能声明+固定，不能"调到一个好看的数字"。

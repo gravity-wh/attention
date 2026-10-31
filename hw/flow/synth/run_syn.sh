@@ -133,8 +133,9 @@ SYN_CPUS=${SYN_CPUS:-4}
 export SYN_TOP="$TOP" SYN_FLIST="$PWD/$OUT/filelist.clean.f" SYN_OUT="$PWD/$OUT" \
        SYN_CLK_NS="$CLK_NS" SYN_IODLY_NS="$IODLY_NS" SYN_UNC_NS="$UNC_NS" \
        SYN_IO_DELAY_NS="$IODLY_NS" SYN_CLK_UNCERT_NS="$UNC_NS" \
-       SYN_QB="$QB" SYN_QF="$QF" SYN_LUT="$LUT" SYN_CPUS="$SYN_CPUS"
-echo "[syn] 并行映射进程数 SYN_CPUS=$SYN_CPUS"
+       SYN_QB="$QB" SYN_QF="$QF" SYN_LUT="$LUT" SYN_CPUS="$SYN_CPUS" \
+       SYN_PHYS="${SYN_PHYS:-1}"
+echo "[syn] 并行映射进程数 SYN_CPUS=$SYN_CPUS；面积来源 SYN_PHYS=${SYN_PHYS:-1}（1=LEF，0=.lib）"
 ( cd "$PWD" && genus -no_gui -files flow/synth/syn.tcl ) 2>&1 | tee "$OUT/syn.log"
 GEN_RC=${PIPESTATUS[0]}
 

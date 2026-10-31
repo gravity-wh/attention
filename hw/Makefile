@@ -53,7 +53,7 @@ export VARIANT TAG SEED RUN FLIST TOP CLOCK PVT MODE CAT N VERBOSE QB QF LUT CFG
 # 综合相关的变量也导出：run_syn.sh / syn.tcl 只从环境读，不自己解释 config。
 export PDK CORNER SYN_LIB SYN_LEF SYN_DRIVE_CELL SYN_LOAD_PF \
        SYN_CLK_UNCERT_PCT SYN_IO_DELAY_PCT SYN_TOGGLE_RATE SYN_STATIC_PROB \
-       SYN_CPUS
+       SYN_CPUS SYN_PHYS
 
 .PHONY: all help check model modeltest err vec vecfsck vecfsck1 cfgof sim regress flowtest unit unitall lint syn synall power pdkcheck collect table manifest preflight clean
 
