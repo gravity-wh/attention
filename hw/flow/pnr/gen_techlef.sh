@@ -30,6 +30,14 @@
 #    这里沿「平行走线长度」和「宽度」两个方向取运行最大值，得到单调不减
 #    的表，满足 LEF 规范并尽量保留原间距意图（等价于略微保守）。
 #
+#  可选：RELAX_M1=1
+#    把 M1 的间距表放宽成单一 SPACING 0.05。仅用于「信号层从 M2 起」的流程：
+#    .tf 里 M1 最小间距是 0.1 µm，而标准单元是按真实规则（约 0.07）建的，
+#    相邻摆放在工具眼里就"违反"M1 间距 —— 实测 CTS 阶段稳定残留 3000+ 条
+#    全 M1 的 MetSpc 违例，且不随迭代下降。既然我们根本不在 M1 布信号线，
+#    这条规则对最终版图没有约束意义，放宽后 CTS 才能收敛。
+#    ⚠ 用这个开关生成的 LEF 不能用于「允许 M1 布线」的流程。
+#
 #  用法： bash flow/pnr/gen_techlef.sh [输出目录]
 # =====================================================================
 set -uo pipefail
@@ -92,7 +100,7 @@ grep -iE "translation completed" "$OUTDIR/lefout.log" | sed 's/^/    /'
 # ---- 3. 后处理：剥 LEF58 + 间距表单调化 -------------------------------
 echo "[techlef] 3/3 后处理（LEF58 + 间距表单调化）"
 python3 - "$OUTDIR/smic40_tech_raw.lef" "$OUTDIR/smic40_tech.lef" <<'PY'
-import re, sys
+import os, re, sys
 
 def normalize_tables(text):
     lines = text.split("\n")
@@ -190,6 +198,14 @@ s, ntab = normalize_tables(s)
 # 钝化层不参与布线，删掉不影响任何电气规则。
 s, npa = re.subn(r"^LAYER PA\b.*?^END PA\s*$\n?", "", s, flags=re.S | re.M)
 s, nvia = add_vias(s)
+# 可选：放宽 M1 间距（仅供 M1 不布线的流程，见文件头说明）
+nrelax = 0
+if os.environ.get("RELAX_M1") == "1":
+    def _m1(m):
+        blk = re.sub(r"SPACINGTABLE(?:.*?);\n", "SPACING 0.05 ;\n", m.group(0), flags=re.S)
+        return blk
+    s, nrelax = re.subn(r"^LAYER M1\n(?:.*?\n)*?END M1\n", _m1, s, flags=re.M)
+    print("    RELAX_M1=1：M1 间距放宽为 0.05（%d 处）" % nrelax)
 open(dst, "w").write(s)
 layers = len(re.findall(r"^LAYER ", s, flags=re.M))
 viarules = len(re.findall(r"^VIARULE ", s, flags=re.M))

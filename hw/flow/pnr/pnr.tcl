@@ -22,7 +22,7 @@ set cell_lef [env PNR_CELL_LEF]
 set netlist  [env PNR_NETLIST]
 set top      [env PNR_TOP]
 set outdir   [env PNR_OUT]
-set util     [expr {[info exists ::env(PNR_UTIL)] ? $::env(PNR_UTIL) : 0.65}]
+set util     [expr {[info exists ::env(PNR_UTIL)] ? $::env(PNR_UTIL) : 0.55}]
 
 file mkdir $outdir
 
@@ -35,6 +35,17 @@ set init_pwr_net  VDD
 set init_gnd_net  VSS
 init_design
 puts "\[pnr\] 单元数 = [llength [dbGet -e top.insts.name]]"
+
+# M1 只放单元内部的电源轨/引脚，信号布线从 M2 起。
+# 原因：由 techfile.tf 生成的 tech LEF 里 M1 间距规则与单元实际几何不一致，
+# 一旦允许 NanoRoute 用 M1，CTS 阶段就会出现 8 万+ 条 M1 间距违例且不收敛。
+# 禁用 M1 信号布线后违例降到可收敛范围；代价是布线资源变少，面积/时序略差，
+# 报告里必须注明"信号层从 M2 起"。
+# 多线程：不设的话 NanoRoute 默认单线程，69k 单元的 detail routing 会跑数小时。
+# 本机 8 核 / 7 GB，取 6 线程（留出内存余量，布线内存约 2–3 GB/线程峰值）。
+setMultiCpuUsage -localCpu 6
+
+setNanoRouteMode -routeBottomRoutingLayer 2
 
 step "1. 电源网络"
 globalNetConnect VDD -type pgpin -pin VDD -inst * -override
@@ -61,6 +72,9 @@ puts "\[pnr\] placement 完成"
 step "4. CTS（单时钟，ccopt）"
 ccopt_design
 puts "\[pnr\] CTS 完成"
+# CTS 后立即存盘：布线可能跑很久甚至失败，有这个点就能 saveRestore 续跑，
+# 不用重做 place/CTS（单次 CTS 在本机约 40 分钟）。
+saveDesign $outdir/after_cts.enc
 
 step "5. Route"
 routeDesign

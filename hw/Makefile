@@ -233,6 +233,13 @@ pnr: check
 	bash flow/pnr/run_pnr.sh
 	@$(MAKE) --no-print-directory manifest
 
+# 从 CTS checkpoint 续跑布线（pnr 在多线程下被 OOM 杀掉时用）
+pnr-resume: check
+	@test -f $(PNR_OUT)/after_cts.enc.dat || { \
+	  echo "✗ 缺 CTS checkpoint: $(PNR_OUT)/after_cts.enc.dat"; \
+	  echo "  先跑 make pnr VARIANT=$(VARIANT) TAG=$(TAG) PDK=$(PDK)"; exit 1; }
+	PNR_OUT=$(PNR_OUT) PNR_TOP=$(TOP) bash flow/pnr/run_resume.sh
+
 # ---------------- 4. 结果汇总（复现分的关键）----------------
 # PYTHONIOENCODING：客户机 locale 是 C 时 Python3 的 stdout 是 ASCII 编码，
 # 脚本里任何一句中文 print 都抛 UnicodeEncodeError —— 而且是在写完 csv 之后的
