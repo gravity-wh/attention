@@ -209,11 +209,15 @@ synall:
 	done
 
 # ---------------- 4. 结果汇总（复现分的关键）----------------
+# PYTHONIOENCODING：客户机 locale 是 C 时 Python3 的 stdout 是 ASCII 编码，
+# 脚本里任何一句中文 print 都抛 UnicodeEncodeError —— 而且是在写完 csv 之后的
+# 最后一句 print 上炸，表现为"数据其实是好的，但 make 返回 Error 1"。
+# run_syn.sh 里已经 export 过一次，这里再对 collect/table 各自兜一次。
 collect:
-	$(PY) flow/collect/collect.py runs/ results/metrics.csv
+	PYTHONIOENCODING=utf-8 $(PY) flow/collect/collect.py runs/ results/metrics.csv
 
 table:
-	$(PY) flow/collect/make_table.py results/metrics.csv > results/tables.md
+	PYTHONIOENCODING=utf-8 $(PY) flow/collect/make_table.py results/metrics.csv > results/tables.md
 	@echo "-> results/tables.md"
 
 # ---------------- 5. 可复现清单 ----------------
