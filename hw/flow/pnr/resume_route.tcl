@@ -28,6 +28,9 @@ set cpus [expr {[info exists ::env(PNR_CPUS)] ? $::env(PNR_CPUS) : 2}]
 setMultiCpuUsage -localCpu $cpus
 puts "\[pnr\] 布线线程数 = $cpus"
 setNanoRouteMode -routeBottomRoutingLayer 2
+# 迭代上限：默认会一直优化到收敛，69k 单元上内存随时间上涨；
+# 实测 6 线程 20 分钟内从 ~7 GB 涨到 14 GB。限到 8 轮，够用且可控。
+setNanoRouteMode -drouteEndIteration 8
 # 提取精度：不设工艺节点时 Innovus 会用保守默认值（见 IMPEXT-3530 警告）
 setDesignMode -process 40
 

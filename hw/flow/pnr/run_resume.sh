@@ -32,11 +32,13 @@ fi
 #     2 线程 / 7 GB 机器  -> RSS 6.19 GB，机器被拖到 SSH/NFS 全断
 # 综合（Genus 4 线程 69k 单元）只需 1.5 GB，与布线不是一个量级。
 MEM_GB=$(awk '/^MemTotal:/{printf "%d", $2/1048576}' /proc/meminfo)
-if   [ "$MEM_GB" -ge 14 ]; then PNR_CPUS=6
-elif [ "$MEM_GB" -ge 10 ]; then PNR_CPUS=4
-elif [ "$MEM_GB" -ge 8  ]; then PNR_CPUS=3
-else                            PNR_CPUS=2
+if   [ "$MEM_GB" -ge 14 ]; then _AUTO=6
+elif [ "$MEM_GB" -ge 10 ]; then _AUTO=4
+elif [ "$MEM_GB" -ge 8  ]; then _AUTO=3
+else                            _AUTO=2
 fi
+# 允许外部显式覆盖（回退阶梯靠它降级）：PNR_CPUS=4 make pnr-resume ...
+PNR_CPUS=${PNR_CPUS:-$_AUTO}
 export PNR_CPUS
 echo "[pnr] MemTotal=${MEM_GB} GB -> 布线线程数 PNR_CPUS=$PNR_CPUS"
 
