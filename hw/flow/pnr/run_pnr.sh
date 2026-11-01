@@ -30,6 +30,33 @@ if pgrep -x innovus >/dev/null 2>&1; then
 fi
 
 mkdir -p "$PNR_OUT"
+
+# ---- 按实际内存选线程数 -------------------------------------------------
+# 实测（7 GB VM，69k 单元，信号层 M2-M5）：
+#   6 线程 -> peak > 7 GB，被 OOM killer 杀（退出码 137）
+#   2 线程 -> RSS 6.2 GB，仍把机器拖到无响应
+# 经验值：布线峰值 ≈ 1.5–2.5 GB/线程 + 2 GB 基础开销。
+# 12 GB 给 4 线程、16 GB 给 6 线程、其余按 1 线程/2.5 GB 保守估。
+MEM_GB=$(awk '/^MemTotal:/{printf "%d", $2/1048576}' /proc/meminfo)
+if   [ "$MEM_GB" -ge 15 ]; then PNR_CPUS=6
+elif [ "$MEM_GB" -ge 11 ]; then PNR_CPUS=4
+elif [ "$MEM_GB" -ge 9  ]; then PNR_CPUS=3
+else                            PNR_CPUS=2
+fi
+export PNR_CPUS
+echo "[pnr] MemTotal=${MEM_GB} GB -> 布线线程数 PNR_CPUS=$PNR_CPUS"
+
+
+# SDC 清洗：Genus 导出的 sdc 里有 set_dont_use [get_lib_cells <lib>/FRICG_*]，
+# <lib> 是 .lib 的内部库名，Innovus 在 source sdc 时报 TCLCMD-917 并中断流程。
+# 这些行只约束时钟门控单元，本设计没有 ICG（综合时该属性不被 15.2 支持），
+# 因此剔除它们不影响时序，剔除后原文件保留不动以便追溯。
+CLEAN_SDC="$PNR_OUT/netlist_clean.sdc"
+removed=$(grep -c "get_lib_cells" "$PNR_SDC" || true)
+grep -v "get_lib_cells" "$PNR_SDC" > "$CLEAN_SDC"
+echo "[pnr] SDC 清洗：剔除 $removed 行库单元引用 -> $CLEAN_SDC"
+export PNR_SDC="$CLEAN_SDC"
+
 echo "[pnr] top=$PNR_TOP"
 echo "[pnr] netlist=$PNR_NETLIST"
 echo "[pnr] tech LEF=$PNR_TECH_LEF"

@@ -41,9 +41,11 @@ puts "\[pnr\] 单元数 = [llength [dbGet -e top.insts.name]]"
 # 一旦允许 NanoRoute 用 M1，CTS 阶段就会出现 8 万+ 条 M1 间距违例且不收敛。
 # 禁用 M1 信号布线后违例降到可收敛范围；代价是布线资源变少，面积/时序略差，
 # 报告里必须注明"信号层从 M2 起"。
-# 多线程：不设的话 NanoRoute 默认单线程，69k 单元的 detail routing 会跑数小时。
-# 本机 8 核 / 7 GB，取 6 线程（留出内存余量，布线内存约 2–3 GB/线程峰值）。
-setMultiCpuUsage -localCpu 6
+# 多线程：不设的话 NanoRoute 默认单线程，69k 单元 detail routing 会跑数小时。
+# 线程数由 run_pnr.sh 按实际内存算出（PNR_CPUS）——写死会在小内存机器上 OOM。
+set cpus [expr {[info exists ::env(PNR_CPUS)] ? $::env(PNR_CPUS) : 2}]
+setMultiCpuUsage -localCpu $cpus
+puts "\[pnr\] 线程数 = $cpus"
 
 setNanoRouteMode -routeBottomRoutingLayer 2
 

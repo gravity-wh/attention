@@ -235,7 +235,7 @@ pnr: check
 
 # 从 CTS checkpoint 续跑布线（pnr 在多线程下被 OOM 杀掉时用）
 pnr-resume: check
-	@test -f $(PNR_OUT)/after_cts.enc.dat || { \
+	@test -e $(PNR_OUT)/after_cts.enc.dat || { \
 	  echo "✗ 缺 CTS checkpoint: $(PNR_OUT)/after_cts.enc.dat"; \
 	  echo "  先跑 make pnr VARIANT=$(VARIANT) TAG=$(TAG) PDK=$(PDK)"; exit 1; }
 	PNR_OUT=$(PNR_OUT) PNR_TOP=$(TOP) bash flow/pnr/run_resume.sh

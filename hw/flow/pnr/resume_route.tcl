@@ -22,8 +22,11 @@ set ckpt   "$outdir/after_cts.enc.dat"
 puts "\[pnr\] 从 CTS checkpoint 续跑：$ckpt"
 restoreDesign $ckpt $top
 
-# 布线线程：内存敏感，2 线程
-setMultiCpuUsage -localCpu 2
+# 布线线程：由 run_resume.sh 按实际内存算出来（PNR_CPUS），避免写死。
+# 实测：6 线程 peak >7 GB 被 OOM 杀；2 线程 RSS 6.2 GB 也把 7 GB 机器拖死。
+set cpus [expr {[info exists ::env(PNR_CPUS)] ? $::env(PNR_CPUS) : 2}]
+setMultiCpuUsage -localCpu $cpus
+puts "\[pnr\] 布线线程数 = $cpus"
 setNanoRouteMode -routeBottomRoutingLayer 2
 # 提取精度：不设工艺节点时 Innovus 会用保守默认值（见 IMPEXT-3530 警告）
 setDesignMode -process 40
@@ -33,7 +36,9 @@ routeDesign
 puts "\[pnr\] 布线完成"
 
 puts "\n\[pnr\] ========== 6. 寄生提取 + 签核时序 =========="
-setExtractRCMode -engine postRoute -effort high -coupled true
+# 提取强度：high 会同时保留更多耦合电容数据；medium 在 40nm 上精度足够，
+# 内存占用明显更低（本机 7 GB 曾被它与布线一起打穿）。
+setExtractRCMode -engine postRoute -effort medium -coupled true
 extractRC
 timeDesign -postRoute -outDir $outdir/timing_postroute -numPaths 10
 timeDesign -postRoute -hold -outDir $outdir/timing_postroute_hold -numPaths 10
