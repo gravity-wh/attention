@@ -24,20 +24,43 @@ if pgrep -x innovus >/dev/null 2>&1; then
 fi
 
 
-# ---- 按实际内存选线程数 -------------------------------------------------
-# 实测（7 GB VM，69k 单元，信号层 M2-M5）：
-#   6 线程 -> peak > 7 GB，被 OOM killer 杀（退出码 137）
-#   2 线程 -> RSS 6.2 GB，仍把机器拖到无响应
-# 经验值：布线峰值 ≈ 1.5–2.5 GB/线程 + 2 GB 基础开销。
-# 12 GB 给 4 线程、16 GB 给 6 线程、其余按 1 线程/2.5 GB 保守估。
+
+# ---- 按实际内存选线程数（实测标定，非拍脑袋）-------------------------
+# 实测（69k 单元，信号层 M2-M5）：
+#   布线内存 ≈ 5 GB 基线（设计规模决定）+ 约 0.8 GB/线程
+#     6 线程 / 7 GB 机器  -> peak >7 GB，OOM 被杀
+#     2 线程 / 7 GB 机器  -> RSS 6.19 GB，机器被拖到 SSH/NFS 全断
+# 综合（Genus 4 线程 69k 单元）只需 1.5 GB，与布线不是一个量级。
 MEM_GB=$(awk '/^MemTotal:/{printf "%d", $2/1048576}' /proc/meminfo)
-if   [ "$MEM_GB" -ge 15 ]; then PNR_CPUS=6
-elif [ "$MEM_GB" -ge 11 ]; then PNR_CPUS=4
-elif [ "$MEM_GB" -ge 9  ]; then PNR_CPUS=3
+if   [ "$MEM_GB" -ge 14 ]; then PNR_CPUS=6
+elif [ "$MEM_GB" -ge 10 ]; then PNR_CPUS=4
+elif [ "$MEM_GB" -ge 8  ]; then PNR_CPUS=3
 else                            PNR_CPUS=2
 fi
 export PNR_CPUS
 echo "[pnr] MemTotal=${MEM_GB} GB -> 布线线程数 PNR_CPUS=$PNR_CPUS"
+
+# ---- 内存护栏：超过上限就主动收手，别让 VM 被 OOM 打挂 ----------------
+# 打挂的代价是整台 VM 失去响应（需要人工重启 + 重启 NAT 服务），
+# 而主动终止只是丢一次布线结果（CTS checkpoint 还在，可再来）。
+MEM_WARN_GB=${MEM_WARN_GB:-12}
+MEM_KILL_GB=${MEM_KILL_GB:-14}
+(
+  while pgrep -x innovus >/dev/null 2>&1; do
+    rss_kb=$(ps -eo rss,comm | awk '$2=="innovus"{s+=$1} END{printf "%d", s}')
+    rss_gb=$(( ${rss_kb:-0} / 1048576 ))
+    if [ "$rss_gb" -ge "$MEM_KILL_GB" ]; then
+      echo "[pnr] ⚠ innovus RSS ${rss_gb} GB >= ${MEM_KILL_GB} GB，主动终止以免 VM 被 OOM 拖死" >&2
+      pkill -TERM -x innovus
+      break
+    elif [ "$rss_gb" -ge "$MEM_WARN_GB" ]; then
+      echo "[pnr] ⚠ innovus RSS ${rss_gb} GB（警戒线 ${MEM_WARN_GB} GB）"
+    fi
+    sleep 20
+  done
+) &
+WATCHDOG=$!
+trap 'kill $WATCHDOG 2>/dev/null' EXIT
 
 echo "[pnr] 续跑：$PNR_OUT（$PNR_CPUS 线程）"
 cd "$(dirname "$0")/../.." || die "进不去 hw/ 目录"

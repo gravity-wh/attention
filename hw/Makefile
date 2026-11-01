@@ -20,10 +20,12 @@ TAG     ?= $(VARIANT)
 SEED    ?= 20260101
 SIM     ?= vcs
 SYN     ?= genus
-# 综合并行映射进程数。默认 4：本 VM 只有 7 GB 内存，8 线程跑 ref（7.5 万单元）
-# 会在 technology mapping 阶段被 OOM killer 直接 SIGKILL（日志停在
-# "Multi-threaded Technology Mapping"，无任何报告）。内存更大的机器可调高。
-SYN_CPUS ?= 4
+# 综合并行映射进程数：按实测内存自动定档（实测 4 线程峰值仅 1.5 GB）。
+#   7 GB 机器上 8 线程会在 technology mapping 阶段被 OOM killer SIGKILL
+#   （日志停在 "Multi-threaded Technology Mapping"、无任何报告）；
+#   16 GB 上 8 线程峰值约 4 GB，安全且快 30% 以上。
+# 显式给 SYN_CPUS=... 可覆盖。Windows 侧没有 /proc/meminfo 时回落 4。
+SYN_CPUS ?= $(shell awk '/^MemTotal:/{printf "%d", ($$2/1048576)>=14?8:4}' /proc/meminfo 2>/dev/null || echo 4)
 PY      ?= python3
 
 # ---- 仿真相关的默认档位 ------------------------------------------------
