@@ -243,7 +243,7 @@ footer .sep{flex:1}
   </p>
   <div class="meta-row">
     <span class="chip acc">路线：<b>定点量化 + 近似 Softmax + 结构并行</b></span>
-    <span class="chip">工艺：<b>GPDK045</b> 45 nm</span>
+    <span class="chip">工艺：<b>SMIC 40LL</b>（sc9mc RVT c40）</span>
     <span class="chip">仿真：<b>VCS V-2023.12-SP2</b></span>
     <span class="chip">综合：<b>Genus 15.20</b></span>
     <span class="chip">向量 seed：<b>20260101</b></span>
@@ -401,9 +401,9 @@ footer .sep{flex:1}
       <rect x="44" y="306" width="236" height="26" fill="#F5F4EF" stroke="#D2CCBC"/>
       <text x="54" y="323" font-size="11" font-family="monospace" fill="#45423B">ref  单 MAC 串行 · 100 MHz · 分母</text>
       <rect x="292" y="306" width="236" height="26" fill="#EAF1F6" stroke="#CFDFEA"/>
-      <text x="302" y="323" font-size="11" font-family="monospace" fill="#25506C">varA  8 lane 并行点积 · 200 MHz</text>
+      <text x="302" y="323" font-size="11" font-family="monospace" fill="#25506C">varA  4 lane 并行点积 · 100 MHz</text>
       <rect x="540" y="306" width="236" height="26" fill="#E9F3EE" stroke="#CBE2D6"/>
-      <text x="550" y="323" font-size="11" font-family="monospace" fill="#22604A">varB  脉动阵列 + 在线 Softmax</text>
+      <text x="550" y="323" font-size="11" font-family="monospace" fill="#22604A">varB  行融合 + 4 lane · 100 MHz</text>
 
       <line x1="430" y1="344" x2="430" y2="364" stroke="#9A9484" stroke-width="1.2" marker-end="url(#ar)"/>
 
@@ -417,7 +417,7 @@ footer .sep{flex:1}
 
       <!-- L5 -->
       <rect x="24" y="474" width="812" height="42" rx="2" fill="#FFFFFF" stroke="#D2CCBC"/>
-      <text x="44" y="492" font-size="12.5" font-weight="600" fill="#1B1A17">L5 · 综合　Genus 15.20 ＋ GPDK045（tt/ff/ss）</text>
+      <text x="44" y="492" font-size="12.5" font-weight="600" fill="#1B1A17">L5 · 综合　Genus 15.20 ＋ SMIC 40LL（tt/ss/ff）</text>
       <text x="44" y="508" font-size="11.5" fill="#6B675E" font-family="monospace">同一份映射取 A / WNS / P  →  D = lat / f  →  E = P × D  →  相对改善 A₀/A、D₀/D、E₀/E  →  报告表 2 / 表 3</text>
 
       <!-- side feedback -->
@@ -456,31 +456,31 @@ footer .sep{flex:1}
         数值　qb16 / qf13（贴近 FP16）<br>
         频率　<b>100 MHz</b><br>
         实测　<b>9665 拍</b> · 六类 PASS<br>
-        综合　<b>441 635 µm²</b> · WNS 0 ns · 138 mW
+        综合　<b>205 294 µm²</b> · WNS 0 ns · 48.8 mW
       </div>
     </div>
     <div class="var-card a">
-      <div class="vh"><span class="vt">TOP_VARA</span><span class="tag wip">实现中</span></div>
-      <div class="vn">方案 A · 8 路并行点积</div>
-      <p>把点积按 K 的元素切成 8 路，一个 S 元素 2 拍出结果。隔离的变量是
-        <b>并行度</b>——数值格式与 ref 之外的其余条件完全一致。</p>
+      <div class="vh"><span class="vt">TOP_VARA</span><span class="tag ok">完成</span></div>
+      <div class="vn">方案 A · 4 路并行点积</div>
+      <p>把点积按 K 的元素切成 4 路（一个 (i,j) 从 16 拍降到 4 拍），外加稀疏跳过与
+        Softmax 三级流水。隔离的变量是<b>并行度</b>——数值格式与 ref 之外的其余条件完全一致。</p>
       <div class="facts">
-        结构　KE 阵列，8 lane<br>
+        结构　4 lane + 稀疏跳过 + Softmax 流水<br>
         数值　qb10 / qf7<br>
-        频率　<b>200 MHz</b><br>
-        周期　<span class="tag todo">待测</span>
+        频率　<b>100 MHz</b>（三方案同频）<br>
+        实测　<b>2855 拍</b> · 六类 PASS · RMSE 0.0025
       </div>
     </div>
     <div class="var-card b">
-      <div class="vh"><span class="vt">TOP_VARB</span><span class="tag wip">实现中</span></div>
-      <div class="vn">方案 B · 脉动阵列 + 在线 Softmax</div>
-      <p>改的是<b>数据流形态</b>而不是并行度：Q 驻留、K 流入，把 S 的产出顺序与 Softmax
-        的行推进对齐，减少中间缓冲。它与 A 至少隔离一个主要变量。</p>
+      <div class="vh"><span class="vt">TOP_VARB</span><span class="tag ok">完成</span></div>
+      <div class="vn">方案 B · 行融合 + 4 路并行</div>
+      <p>改的是<b>数据流形态</b>而不是并行度：算完一行 S 立刻做 Softmax 并加权，不落 S/P 全矩阵——
+        <code>sm[256]</code> 与 <code>pu[256]</code> 两个大缓冲整个消失，只剩 16 深的行缓冲。</p>
       <div class="facts">
-        结构　16×16 脉动阵列<br>
+        结构　行融合 + 4 lane（与 A 同 lane 数）<br>
         数值　qb10 / qf7（与 A 相同）<br>
-        频率　<b>200 MHz</b><br>
-        周期　<span class="tag todo">待测</span>
+        频率　<b>100 MHz</b>（三方案同频）<br>
+        实测　<b>1739 拍</b> · 六类 PASS · RMSE 0.0025
       </div>
     </div>
   </div>
@@ -530,8 +530,8 @@ footer .sep{flex:1}
       <!-- panel 2 -->
       <rect x="299" y="16" width="262" height="298" fill="#FFFFFF" stroke="#CFDFEA"/>
       <rect x="299" y="16" width="262" height="30" fill="#EAF1F6" stroke="#CFDFEA"/>
-      <text x="313" y="36" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">varA · 8 lane 点积</text>
-      <text x="527" y="36" font-size="10" fill="#7FA6BE">200 MHz</text>
+      <text x="313" y="36" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">varA · 4 lane 点积</text>
+      <text x="527" y="36" font-size="10" fill="#7FA6BE">100 MHz</text>
 
       <rect x="317" y="60" width="226" height="34" fill="#FDFDFB" stroke="#E4E0D6"/>
       <text x="329" y="81" font-size="11" fill="#45423B">装载 Q / K / V（同端口契约）</text>
@@ -539,7 +539,7 @@ footer .sep{flex:1}
 
       <rect x="317" y="110" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
       <text x="329" y="128" font-size="11" font-weight="600" fill="#1B1A17">S = Q·Kᵀ</text>
-      <text x="329" y="143" font-size="10.5" fill="#25506C" font-family="monospace">8 lane 并行乘 ＋ 3 级加法树（理想 2 拍）</text>
+      <text x="329" y="143" font-size="10.5" fill="#25506C" font-family="monospace">4 lane 并行乘 ＋ 3 级加法树（16 拍 → 4 拍）</text>
       <line x1="430" y1="150" x2="430" y2="164" stroke="#9A9484" marker-end="url(#a2)"/>
 
       <rect x="317" y="166" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
@@ -549,38 +549,38 @@ footer .sep{flex:1}
 
       <rect x="317" y="222" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
       <text x="329" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
-      <text x="329" y="255" font-size="10.5" fill="#25506C" font-family="monospace">同一 8 lane 阵列复用 ｜ 零元素门控</text>
-      <text x="317" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">待测</tspan>：8 lane → 理想 1/8</text>
+      <text x="329" y="255" font-size="10.5" fill="#25506C" font-family="monospace">同一 4 lane 阵列复用 ｜ 零组跳过</text>
+      <text x="317" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">2855 拍</tspan>（实测）· 理想 1/4</text>
       <text x="317" y="304" font-size="10" fill="#9A9484">隔离变量：并行度（数值格式不变）</text>
 
       <!-- panel 3 -->
       <rect x="580" y="16" width="262" height="298" fill="#FFFFFF" stroke="#CBE2D6"/>
       <rect x="580" y="16" width="262" height="30" fill="#E9F3EE" stroke="#CBE2D6"/>
-      <text x="594" y="36" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">varB · 脉动阵列</text>
-      <text x="808" y="36" font-size="10" fill="#7FA394">200 MHz</text>
+      <text x="594" y="36" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">varB · 行融合</text>
+      <text x="808" y="36" font-size="10" fill="#7FA394">100 MHz</text>
 
       <rect x="598" y="60" width="226" height="34" fill="#FDFDFB" stroke="#E4E0D6"/>
       <text x="610" y="81" font-size="11" fill="#45423B">装载 Q / K / V（同端口契约）</text>
       <line x1="711" y1="94" x2="711" y2="108" stroke="#9A9484" marker-end="url(#a2)"/>
 
       <rect x="598" y="110" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
-      <text x="610" y="128" font-size="11" font-weight="600" fill="#1B1A17">16×16 脉动阵列</text>
-      <text x="610" y="143" font-size="10.5" fill="#22604A" font-family="monospace">Q 驻留，K 逐列流入 ｜ 乘加就地累积</text>
+      <text x="610" y="128" font-size="11" font-weight="600" fill="#1B1A17">行融合 + 4 lane 点积</text>
+      <text x="610" y="143" font-size="10.5" fill="#22604A" font-family="monospace">算完一行即 Softmax ｜ 不落 S/P 全矩阵</text>
       <line x1="711" y1="150" x2="711" y2="164" stroke="#9A9484" marker-end="url(#a2)"/>
 
       <rect x="598" y="166" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
-      <text x="610" y="184" font-size="11" font-weight="600" fill="#1B1A17">在线 Softmax</text>
-      <text x="610" y="199" font-size="10.5" fill="#22604A" font-family="monospace">max / sum 随行推进，省掉整行缓冲</text>
+      <text x="610" y="184" font-size="11" font-weight="600" fill="#1B1A17">行内 Softmax</text>
+      <text x="610" y="199" font-size="10.5" fill="#22604A" font-family="monospace">max / exp / 归一随行推进 ｜ 只留 16 深行缓冲</text>
       <line x1="711" y1="206" x2="711" y2="220" stroke="#9A9484" marker-end="url(#a2)"/>
 
       <rect x="598" y="222" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
       <text x="610" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
-      <text x="610" y="255" font-size="10.5" fill="#22604A" font-family="monospace">阵列转置复用，P 边出边乘</text>
-      <text x="598" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">待测</tspan>：靠数据复用压缩调度开销</text>
-      <text x="598" y="304" font-size="10" fill="#9A9484">隔离变量：数据流形态（并行度同为 16）</text>
+      <text x="610" y="255" font-size="10.5" fill="#22604A" font-family="monospace">同一 4 lane 阵列复用 ｜ P 边出边乘</text>
+      <text x="598" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">1739 拍</tspan>（实测）· 靠数据复用压缩调度开销</text>
+      <text x="598" y="304" font-size="10" fill="#9A9484">隔离变量：数据流形态（lane 数与 A 同为 4）</text>
     </svg>
-    <figcaption><b>图 2</b>　三方案的数据流与并行度。ref 的周期数是实测值；varA / varB 的周期与面积
-      待综合与回归完成后回填 <code>results/metrics.csv</code>，不在页面上预先写数字。</figcaption>
+    <figcaption><b>图 2</b>　三方案的数据流与并行度。周期数均为实测值（<code>results/metrics.csv</code>）；
+      三方案同频 100 MHz——varA/varB 不单独提频，时延差异只来自周期数（<code>config/variants.mk</code>）。</figcaption>
   </figure>
 
   <h3>参考实现这条“尺子”怎么来的</h3>
@@ -875,11 +875,11 @@ footer .sep{flex:1}
 
       <rect x="320" y="154" width="240" height="54" fill="#EAF1F6" stroke="#CFDFEA"/>
       <text x="334" y="175" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">top_varA</text>
-      <text x="334" y="194" font-size="10.5" fill="#5E7E93">8 lane · 200 MHz</text>
+      <text x="334" y="194" font-size="10.5" fill="#5E7E93">4 lane · 100 MHz · 2855 拍</text>
 
       <rect x="584" y="154" width="240" height="54" fill="#E9F3EE" stroke="#CBE2D6"/>
       <text x="598" y="175" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">top_varB</text>
-      <text x="598" y="194" font-size="10.5" fill="#5E8A76">脉动阵列 · 200 MHz</text>
+      <text x="598" y="194" font-size="10.5" fill="#5E8A76">行融合 · 100 MHz · 1739 拍</text>
 
       <!-- core -->
       <rect x="56" y="228" width="768" height="44" fill="#FFFFFF" stroke="#D2CCBC"/>
@@ -964,57 +964,63 @@ footer .sep{flex:1}
 <!-- ================= 06 ================= -->
 <section id="s06">
   <h2 class="sec"><span class="num">06</span>PDK 与综合环境</h2>
-  <p class="sub">45 nm 通用库 + Genus 15.2，三个角齐全；两个必须知道的坑都写进了流程的自动检查。</p>
+  <p class="sub">真实 40nm LL 商用库 + Genus 15.2，三个角齐全；两个必须知道的坑都写进了流程的自动检查。</p>
 
-  <p>题面允许 SKY130、GF180MCU 或学校可用的其他工艺。我们选了 VM 上工具自带的两套 45 nm 库之一，
-  理由是<b>角和工具链都在同一台机器上、且已被脚本验证过</b>——40 分的效率项依赖“成对测量”，
-  换工艺的迁移成本会直接吃掉可用的迭代次数。</p>
+  <p>题面允许 SKY130、GF180MCU 或学校可用的其他工艺。早期用 GPDK045（Innovus 自带的预测性 45nm 教学库）打通流程；
+  <b>2026-10-31 起全面切换到 SMIC 40LL（sc9mc base RVT c40，r1p1）</b>——真实可流片的 40nm 商用库，
+  面积 / 延迟 / 功耗对应真实工艺，且带全单元 Verilog 模型可做门级仿真。切换的理由很直接：
+  预测性库的"面积改善倍数"没有工艺意义，而 40 分的效率项依赖"成对测量"。</p>
 
-  <h3>库的选择：只有两套 45 nm 可用</h3>
+  <h3>库的选择：SMIC 40LL 为权威，GPDK045 退为备选</h3>
   <div class="tw">
   <table>
     <thead><tr><th>库</th><th class="c">工艺角</th><th class="num">单元数</th><th class="c">面积字段</th><th>结论</th></tr></thead>
     <tbody>
+      <tr><td><b>SMIC 40LL</b>（SC9MC）<br><span style="font-size:11.5px;color:#78736A">sc9mc logic0040ll base RVT c40，r1p1，真实可流片</span></td>
+          <td class="c"><b>tt / ss / ff 三角齐全</b></td><td class="num">1043</td><td class="c">真实<br>（.lib 与 LEF SIZE 一致）</td>
+          <td><span class="tag ok">选用</span> 报告全部数字的权威来源；另有全单元 Verilog 模型，可门级仿真</td></tr>
       <tr><td><b>GPDK045</b><br><span style="font-size:11.5px;color:#78736A">gsclib045 v3.5 的再表征版，随 Innovus 发布</span></td>
-          <td class="c"><b>tt / ff / ss 三角齐全</b></td><td class="num">477</td><td class="c">全为 0.0</td>
-          <td><span class="tag ok">选用</span> 报告里“工艺角”一栏才有内容可写</td></tr>
+          <td class="c">tt / ff / ss 三角齐全</td><td class="num">477</td><td class="c">全为 0.0</td>
+          <td><span class="tag">备选</span> 预测性工艺：面积须从 LEF 补、无 Verilog 模型、慢角结论失真，仅早期迭代用</td></tr>
       <tr><td>gsclib045_v3.5<br><span style="font-size:11.5px;color:#78736A">同一套单元的原始版</span></td>
           <td class="c">只有 slow</td><td class="num">486</td><td class="c">全为 0.0</td>
           <td>带 SRAM macro 库，但缺角，不选</td></tr>
     </tbody>
-    <caption>两套库<b>单元名完全相同</b>（GPDK045 就是 gsclib045 的再表征），所以只能二选一装进流程，
-      不能混用——混用的表现是“标签写 tt、实际加载了 ss 的库”，数字错了但看不出来。</caption>
+    <caption>两套库<b>单元名完全不同</b>（SMIC40LL 驱动单元叫 <code>BUFH_X4M_A9TR40</code>，GPDK045 叫 <code>BUFX4</code>），
+      所以只能按 PDK 整套切换（<code>pdk.mk</code> 一处改），不能混用——混用的表现是"标签写 tt、实际加载了另一个库"，
+      数字错了但看不出来。<b>跨工艺只能比趋势，不能比绝对值。</b></caption>
   </table>
   </div>
 
   <h3>三个角与真实电压</h3>
   <div class="tw">
   <table>
-    <thead><tr><th>用途</th><th>库文件</th><th class="num">process</th><th class="num">voltage</th><th class="num">temp</th><th>PVT 标签</th></tr></thead>
+    <thead><tr><th>用途</th><th>库文件后缀</th><th class="num">process</th><th class="num">voltage</th><th class="num">temp</th><th>PVT 标签</th></tr></thead>
     <tbody>
-      <tr><td>典型 / 签核基准</td><td><code>typical.lib</code></td><td class="num">1.0</td><td class="num"><b>1.20 V</b></td><td class="num">25 °C</td><td><code>TT_25C_1V20</code></td></tr>
-      <tr><td>最快（查 hold 与短路功耗）</td><td><code>fast.lib</code></td><td class="num">1.0</td><td class="num"><b>1.32 V</b></td><td class="num">0 °C</td><td><code>FF_0C_1V32</code></td></tr>
-      <tr><td>最慢（查 setup）</td><td><code>slow.lib</code></td><td class="num">1.0</td><td class="num"><b>1.08 V</b></td><td class="num">125 °C</td><td><code>SS_125C_1V08</code></td></tr>
+      <tr><td>典型 / 签核基准</td><td><code>tt_typical_max_1p10v_25c</code></td><td class="num">1.0</td><td class="num"><b>1.10 V</b></td><td class="num">25 °C</td><td><code>TT_25C_1V10</code></td></tr>
+      <tr><td>最快（查 hold 与短路功耗）</td><td><code>ff_typical_min_1p21v_m40c</code></td><td class="num">1.0</td><td class="num"><b>1.21 V</b></td><td class="num">−40 °C</td><td><code>FF_M40C_1V21</code></td></tr>
+      <tr><td>最慢（查 setup）</td><td><code>ss_typical_max_0p99v_125c</code></td><td class="num">1.0</td><td class="num"><b>0.99 V</b></td><td class="num">125 °C</td><td><code>SS_125C_0V99</code></td></tr>
     </tbody>
     <caption>PVT 标签由 <code>CORNER</code> 从 <code>config/pdk.mk</code> 派生，<b>标签与实际加载的库文件必然一致</b>——
-      这是把“写错标签”变成不可能，而不是靠人记得改两处。</caption>
+      这是把“写错标签”变成不可能，而不是靠人记得改两处。库包另有 <code>ff_..._125c</code> 与 <code>ss_..._m40c</code>
+      两个角，本流程未使用。</caption>
   </table>
   </div>
 
   <div class="callout bad">
-    <span class="lbl">坑一 · 库里的面积全是 0.0</span>
-    <p>演示库被剥掉了面积字段，Genus 读库时会刷一屏
-    <code>Warning : Libcell has no area attribute. Defaulting to 0 area. [LBR-43]</code>。
-    只读 <code>.lib</code> 的话 <code>report_area</code> 给出 <b>0 µm²</b>——而 0 会一路混进报告表 2，
-    表现为“面积改善了无穷倍”。面积的真实来源是 <b>LEF</b>（<code>gsclib045.lef</code> 里 487 个 MACRO
-    都有 <code>SIZE W BY 1.71</code>）。所以流程强制 <code>read_physical -lef</code>，
-    并在解析后体检：<b>面积解析不出来或等于 0 就直接失败退出</b>，不允许生成一个“看起来跑完了”的 0 面积结果。</p>
+    <span class="lbl">坑一 · LEF 是 macro-only，面积只认 .lib</span>
+    <p>SMIC40LL 的 LEF 只有单元 MACRO、<b>没有任何工艺层（LAYER 段为 0）</b>，强行
+    <code>read_physical -lef</code> 会报 <code>PHYS-10</code>（无电容/电阻可读）。它的 <code>.lib</code> 自带真实面积
+    （<code>BUFH_X4M_A9TR40</code> = 1.9152 µm²，与 LEF 的 1.52×1.26 一致），所以流程用
+    <code>SYN_PHYS=0</code> 跳过 LEF 读入、面积直接取 <code>.lib</code>。
+    反过来 GPDK045 的 <code>.lib</code> 面积全是 0.0，必须从 LEF 补——<b>两类库的面积来源相反，
+    选错要么面积全 0、要么综合直接失败</b>，<code>make pdkcheck</code> 会检查这一项。</p>
   </div>
 
   <div class="callout warn">
     <span class="lbl">坑二 · 电压不是 0.9 V</span>
-    <p>题面模板里的 <code>tt_25C_0.90V</code> 只是个占位符。实测这个库的典型角是 <b>1.20 V</b>。
-    动态功耗 ∝ V²，按 0.9 V 去报而库是 1.2 V，功耗数字整体会差约 <b>78%</b>。
+    <p>题面模板里的 <code>tt_25C_0.90V</code> 只是个占位符。实测这个库的典型角是 <b>1.10 V</b>。
+    动态功耗 ∝ V²，按 0.9 V 去报而库是 1.1 V，功耗数字整体会差约 <b>49%</b>。
     <code>variants.mk</code> 里原来的占位符已经改掉，现在 PVT 标签只从 <code>pdk.mk</code> 派生。</p>
   </div>
 
@@ -1023,10 +1029,10 @@ footer .sep{flex:1}
   <table>
     <thead><tr><th>约束</th><th>取值</th><th>为什么是这个值</th></tr></thead>
     <tbody>
-      <tr><td>时钟</td><td><code>clk</code>，周期 = 1000/CLOCK ns<br>ref 100 MHz · varA/varB 200 MHz</td><td>频率是变量，从 <code>config/variants.mk</code> 读，不在脚本里写死</td></tr>
+      <tr><td>时钟</td><td><code>clk</code>，周期 = 1000/CLOCK ns<br><b>三方案同频 100 MHz</b></td><td>频率从 <code>config/variants.mk</code> 读，不在脚本里写死；曾给 varA/varB 配 200 MHz，已纠正（白送的时延优势会让效率对比作废）</td></tr>
       <tr><td>时钟不确定性</td><td>5% 周期</td><td>综合阶段没有时钟树，用固定比例吸收 jitter ＋ 偏斜</td></tr>
-      <tr><td>输入驱动单元</td><td><code>BUFX4</code></td><td><b>不用 ideal 驱动</b>：ideal 给 0 输入转换时间，路径延迟偏乐观，还会把三方案之间的差异抹平</td></tr>
-      <tr><td>输入转换时间</td><td>0.05 ns</td><td>与 BUFX4 驱动量级匹配</td></tr>
+      <tr><td>输入驱动单元</td><td><code>BUFH_X4M_A9TR40</code></td><td><b>不用 ideal 驱动</b>：ideal 给 0 输入转换时间，路径延迟偏乐观，还会把三方案之间的差异抹平</td></tr>
+      <tr><td>输入转换时间</td><td>0.05 ns</td><td>与驱动单元输出转换量级匹配（库专属单元名，换 PDK 必须同步换）</td></tr>
       <tr><td>输出负载</td><td>0.016 pF</td><td>≈ 一个扇出 2 的门 ＋ 一小段线；综合阶段无布线信息，只能声明并固定</td></tr>
       <tr><td>I/O 延迟</td><td>各 25% 周期</td><td>粗略反映“外面还有一级寄存器”，留一半周期给组合逻辑</td></tr>
       <tr><td><code>rst_n</code></td><td><code>set_false_path</code></td><td>异步复位，不做时序检查，否则会被当成跨时钟路径</td></tr>
@@ -1045,7 +1051,7 @@ footer .sep{flex:1}
   <table>
     <thead><tr><th>指标</th><th>怎么来的</th><th>边界（写进报告）</th></tr></thead>
     <tbody>
-      <tr><td><b>面积 A</b> (µm²)</td><td><code>report_area</code> 的 Total area，单元面积取自 LEF</td><td>综合后网表的<b>标准单元面积</b>；不含布线开销、不含时钟树、不含 IO/pad、不含 SRAM 宏（本设计未用宏）</td></tr>
+      <tr><td><b>面积 A</b> (µm²)</td><td><code>report_area</code> 的 Total area，单元面积取自 <code>.lib</code>（LEF 为 macro-only）</td><td>综合后网表的<b>标准单元面积</b>；不含布线开销、不含时钟树、不含 IO/pad、不含 SRAM 宏（本设计未用宏）</td></tr>
       <tr><td><b>时延 D</b> (µs)</td><td>仿真测得的 <code>lat_max</code>（周期数）÷ 频率 (MHz)</td><td>从 <code>start</code> 到最后一个 <code>o_vld</code> 输出，<b>含格式转换、运算、存储、控制全流程</b>；不是单条路径延迟</td></tr>
       <tr><td><b>功率 P</b> (mW)</td><td><code>report_power</code>，活动率固定 toggle 0.1 / static 0.5</td><td><b>静态估计</b>，不是仿真功耗（没有 VCD 反标）；绝对值仅供同条件比较</td></tr>
       <tr><td><b>能耗 E</b> (nJ)</td><td>P (mW) × D (µs)</td><td>量纲正好是 nJ；这是“一次完整任务”的能耗，不是峰值功耗</td></tr>
@@ -1153,7 +1159,7 @@ footer .sep{flex:1}
 <!-- ================= 08 ================= -->
 <section id="s08">
   <h2 class="sec"><span class="num">08</span>现状、风险与下一步</h2>
-  <p class="sub">已经能跑通的是“数值 + 验证 + 流程”，还没拿到的是“综合数字”和“第二、三套实现”。</p>
+  <p class="sub">已经能跑通的是“数值 + 验证 + 流程 + 三方案综合”，还没拿到的是“可签核的后端结果”和“门级仿真”。</p>
 
   <h3>当前状态</h3>
   <div class="tw">
@@ -1166,9 +1172,10 @@ footer .sep{flex:1}
       <tr><td>验证</td><td>一份 tb 三 DUT、双判据、六类语义、覆盖率采样</td><td class="c"><span class="tag ok">完成</span></td><td><code>make flowtest</code> 双向验证</td></tr>
       <tr><td>流程</td><td>VCS 编译/仿真/回归、Genus 综合、指标汇总</td><td class="c"><span class="tag ok">完成</span></td><td><code>hw/flow/</code></td></tr>
       <tr><td>ref RTL</td><td>串行单 MAC，六类各 2 任务全 PASS</td><td class="c"><span class="tag ok">完成</span></td><td>0 失配 · 9665 拍</td></tr>
-      <tr><td>varA RTL</td><td>8 lane 并行点积</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varA/</code> 仅 filelist</td></tr>
-      <tr><td>varB RTL</td><td>脉动阵列 + 在线 Softmax</td><td class="c"><span class="tag wip">进行中</span></td><td><code>rtl/varB/</code> 仅 filelist</td></tr>
-      <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag wip">ref 已出</span></td><td><code>metrics.csv</code>：A 441 635 µm² · 9665 拍 · D 96.65 µs · E 13 369 nJ · WNS 0</td></tr>
+      <tr><td>varA RTL</td><td>4 lane 并行点积</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 2855 拍 · RMSE 0.002492；综合三角见 <code>05</code></td></tr>
+      <tr><td>varB RTL</td><td>行融合 + 4 lane 并行</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 1739 拍 · RMSE 0.002492；面积 2.07× / 功耗 2.56× 领先</td></tr>
+      <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag ok">9/9 完成</span></td><td><code>metrics.csv</code>（SC9MC）：三方案×三角 WNS 全 0；ref tt 205 294 µm² · 48.82 mW · varB tt 99 097 µm² · 19.11 mW</td></tr>
+      <tr><td>后端 P&R（ref）</td><td>布局 → CTS → 布线 → qrc 提取 → 后布线 STA → 网表/DEF，全流程闭环</td><td class="c"><span class="tag wip">非签核</span></td><td><code>07-后端PR结果.md</code>：两条限定——tech LEF 为工具生成（本地无官方版）＋ 未做后布线优化；报告引用必须带上</td></tr>
       <tr><td>报告</td><td>表 1/2/3 ＋ 个人贡献说明</td><td class="c"><span class="tag plan">待写</span></td><td>—</td></tr>
     </tbody>
   </table>
