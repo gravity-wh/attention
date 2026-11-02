@@ -44,11 +44,13 @@ set -uo pipefail
 export PYTHONIOENCODING=utf-8          # locale=C 下 Python3 中文 print 会炸
 
 OUTDIR=${1:-$PWD/work_techlef}
-# techfile 来源（2026-11-02 本地 PDK 备份清查，E:\eBook\pdk\pdk）：
-#   · VM 默认这份是 **6LM_1TM** 版，与 E:\eBook\pdk\pdk\smic40ll\techfile.tf 同源
-#     （md5 ff61985351901d2ebcc47b2f185f8312）；
-#   · E:\eBook\pdk\pdk\40nm_TF\PDK\SPDK40LL_1125_1TM_OA_CDS_V1.4\...\techfile.tf
-#     是 **9LM_1TM** 版（md5 0a8d9daafddeb4048ec3d79e76902734，配套 icc.rules_9lm_1tm）。
+# techfile 来源（2026-11-02 PDK 清查；本地备份已由 E:\eBook\pdk\pdk 迁至 NAS：
+#   \\home-nas\资料库\02_专业资料\PDK与工艺库\SMIC_40nm_PDK\extracted_pdk\pdk）：
+#   · VM 默认这份是 **6LM_1TM** 版，与 <NAS根>/smic40ll/techfile.tf 同源
+#     （md5 ff61985351901d2ebcc47b2f185f8312，158537 字节）；
+#   · <NAS根>/40nm_TF/PDK/SPDK40LL_1125_1TM_OA_CDS_V1.4/.../techfile.tf
+#     是 **9LM_1TM** 版（md5 0a8d9daafddeb4048ec3d79e76902734，177623 字节，
+#     配套 icc.rules_9lm_1tm）。
 #   两版不是同一文件。单元库本身只用 M1/M2/V1（doc/…_layermap.txt 实证），
 #   栈选项只影响上层布线可选层数（本流程信号层到 M5，两版都覆盖）。
 #   换版前先在 VM 上核对：md5sum /opt/cadence/PDK/smic40/smic40ll/techfile.tf
