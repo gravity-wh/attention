@@ -41,7 +41,7 @@ desc_varA := 方案A：4 lane 并行点积 + P·V 零组跳过 + Softmax 三级�
 top_varB := top_varB
 clock_varB := $(CLOCK_MHZ)
 sdc_varB := clk_varB.sdc
-desc_varB := 方案B：行融合（不存 S/P 全矩阵）+ 8 lane 并行
+desc_varB := 方案B：行融合（不存 S/P 全矩阵）+ 4 lane 并行（与 varA 同 lane 数，单变量对照）
 
 # ---- PVT 角 ----------------------------------------------------------
 # 已移到 config/pdk.mk：角的选择与它对应的 .lib 是同一件事，
