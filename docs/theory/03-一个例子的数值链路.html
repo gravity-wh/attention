@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一个例子走完 ref 的数值链路 | Transformer 注意力计算模块</title>
+<style>
+:root{
+  --bg:#FDFDFB; --surface:#FFFFFF; --surface-2:#F5F4EF; --surface-3:#EFEEE7;
+  --ink:#1B1A17; --ink-2:#45423B; --muted:#78736A; --faint:#A9A395;
+  --line:#E4E0D6; --line-2:#D2CCBC;
+  --accent:#2F5D7C; --accent-soft:#EAF1F6;
+  --ok:#2C7A5B; --ok-soft:#E9F3EE;
+  --warn:#9C6E16; --warn-soft:#FBF3E1;
+  --bad:#9E3B32; --bad-soft:#FBEBE8;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"Courier New",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Source Han Sans SC",sans-serif;
+  --maxw:920px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.78;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px 90px}
+a{color:var(--accent); text-decoration:none; border-bottom:1px solid rgba(47,93,124,.25)}
+a:hover{border-bottom-color:var(--accent)}
+
+.hero{padding:56px 0 30px; border-bottom:1px solid var(--line)}
+.kicker{
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:14px;
+}
+h1{font-size:38px; line-height:1.24; margin:0 0 16px; letter-spacing:-.02em; font-weight:700}
+h1 .thin{color:#8C8677; font-weight:400}
+.lede{font-size:16.5px; color:var(--ink-2); max-width:46em; margin:0 0 22px}
+.lede code{font-family:var(--mono); font-size:.9em; background:var(--surface-2); padding:1px 5px; border-radius:3px}
+.meta-row{display:flex; flex-wrap:wrap; gap:8px}
+.chip{font-size:12px; padding:3px 10px; border-radius:999px; background:var(--surface-2);
+  color:var(--ink-2); border:1px solid var(--line)}
+.chip b{font-weight:600; color:var(--ink)}
+.chip.acc{background:var(--accent-soft); border-color:#CFDFEA; color:#25506C}
+
+section{padding-top:52px}
+h2.sec{font-size:24px; margin:0 0 6px; letter-spacing:-.015em; font-weight:680; display:flex; align-items:baseline; gap:13px}
+h2.sec .num{font-family:var(--mono); font-size:12px; color:var(--accent); letter-spacing:.1em;
+  font-weight:500; padding:3px 8px; background:var(--accent-soft); border-radius:3px}
+.sub{color:var(--muted); font-size:14.5px; margin:0 0 22px}
+h3{font-size:16.5px; margin:30px 0 8px; font-weight:650}
+h3::before{content:"\258D"; color:var(--line-2); margin-right:8px; font-size:13px}
+p{margin:0 0 13px}
+ul,ol{margin:0 0 15px; padding-left:22px}
+li{margin:4px 0}
+strong{font-weight:650}
+code{font-family:var(--mono); font-size:.87em; background:var(--surface-2); padding:1px 5px; border-radius:3px; color:#3A3730}
+
+.tw{overflow-x:auto; margin:16px 0 20px; border:1px solid var(--line); border-radius:2px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:13.5px; line-height:1.6}
+th{text-align:left; font-weight:600; font-size:11.5px; letter-spacing:.05em; color:var(--muted);
+  background:var(--surface-2); padding:9px 12px; border-bottom:1px solid var(--line-2); white-space:nowrap}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#FBFBF7}
+td.num,th.num{font-family:var(--mono); font-size:12.5px; text-align:right; white-space:nowrap}
+td.c,th.c{text-align:center}
+tr.tot td{background:var(--surface-2); font-weight:600}
+caption{caption-side:bottom; text-align:left; font-size:12px; color:var(--muted); padding:8px 12px}
+
+.callout{border-left:3px solid var(--line-2); background:var(--surface-2);
+  padding:13px 17px; margin:16px 0; font-size:14px; color:var(--ink-2)}
+.callout b,.callout strong{color:var(--ink)}
+.callout.key{border-left-color:var(--accent); background:var(--accent-soft)}
+.callout.warn{border-left-color:#C79A3C; background:var(--warn-soft)}
+.callout.bad{border-left-color:var(--bad); background:var(--bad-soft)}
+.callout .lbl{display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:4px}
+.callout p:last-child{margin-bottom:0}
+
+figure{margin:22px 0 24px}
+figure svg{display:block; width:100%; height:auto; border:1px solid var(--line); background:var(--surface)}
+figcaption{font-size:12.5px; color:var(--muted); margin-top:8px}
+figcaption b{color:var(--ink-2); font-weight:600}
+
+.eq{font-family:var(--mono); font-size:13px; background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--accent); padding:12px 16px; margin:14px 0; color:var(--ink-2); overflow-x:auto; white-space:nowrap}
+footer{margin-top:64px; padding-top:20px; border-top:1px solid var(--line);
+  font-size:12.5px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 20px}
+footer .sep{flex:1}
+@media (max-width:760px){
+  .wrap{padding:0 18px 70px}
+  h1{font-size:28px}
+  .lede{font-size:15.5px}
+  h2.sec{font-size:20px; flex-wrap:wrap}
+  section{padding-top:40px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">ICDesign · Transform · 数值链路</div>
+  <h1>一行注意力，<span class="thin">从 FP16 到 FP16</span></h1>
+  <p class="lede">
+    这一页只做一件事：把 <code>ref</code> 里那条定点通路，用一组<b>能手工验算的数字</b>从头走到尾。
+    每一步给出整数、真值、对应的 RTL 行号，以及"为什么必须这么做"。
+    看完之后，<code>top_ref.sv</code> 里那些移位量和位宽就不再是魔法数字。
+  </p>
+  <div class="meta-row">
+    <span class="chip acc">格式 <b>qb16 / qf13</b>（ref 的真实配置）</span>
+    <span class="chip">微例 <b>L=4</b> 手算</span>
+    <span class="chip acc">全例 <b>L=16</b> §08</span>
+    <span class="chip">softmax <b>F=16</b></span>
+    <span class="chip">输出 <b>binary16</b></span>
+  </div>
+</header>
+
+<div class="callout warn">
+  <span class="lbl">先交代规模：为什么要缩，缩了会走样什么</span>
+  <p>真实设计是 <b>L=16、d=16</b>：一行 16 个 key，每个 key 16 维，Q、K、V 都是 16×16。
+  §00–§07 把它压成 <b>4 个 key、4 维</b>，唯一的理由是 16 次乘加在纸上没法<b>逐位</b>验算。
+  所有移位量、位宽、LUT、舍入规则都取 ref 的真实值（QF=13、S_FRAC=16、RECIP_SH=40、Y_FRAC=13、LUT 33 项），
+  所以每一步算术与硬件执行的是同一份代码。</p>
+  <p>但"规模只影响循环几拍"这句话不严谨：<b>列数会改变数值分布</b>。
+  累加深度、T 的量级、p 的相对量化步长、Σp 是否恰好等于 1.0，都会跟着列数走。
+  所以 <a href="#s08">§08 把规模放回 16×16 重跑了一遍</a>。两节对照着看，才分得清哪些性质是结构给的、哪些是"缩小送的"。</p>
+</div>
+
+<figure>
+<svg viewBox="0 0 860 214" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="本例的数值链路">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#A9A395" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect x="20" y="44" width="176" height="122" fill="#F5F4EF" stroke="#D2CCBC" stroke-width="1"/>
+  <text x="34" y="66" font-size="12" font-weight="600" fill="#45423B" font-family="monospace">① 量化</text>
+  <text x="34" y="90" font-size="11.5" fill="#45423B" font-family="monospace">1.0 → 8192</text>
+  <text x="34" y="110" font-size="11.5" fill="#45423B" font-family="monospace">0.5 → 4096</text>
+  <text x="34" y="130" font-size="11.5" fill="#45423B" font-family="monospace">−0.5 → −4096</text>
+  <text x="34" y="152" font-size="11" fill="#78736A" font-family="monospace">F = 13</text>
+
+  <rect x="228" y="44" width="176" height="122" fill="#EAF1F6" stroke="#CFDFEA" stroke-width="1"/>
+  <text x="242" y="66" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">② Q·Kᵀ 与 /4</text>
+  <text x="242" y="90" font-size="11.5" fill="#25506C" font-family="monospace">acc = 268 435 456</text>
+  <text x="242" y="110" font-size="11.5" fill="#25506C" font-family="monospace">acc ≫ 12 → 65 536</text>
+  <text x="242" y="130" font-size="11.5" fill="#25506C" font-family="monospace">S = 1.0 / 0.5 / 0 / −0.5</text>
+  <text x="242" y="152" font-size="11" fill="#5F6B72" font-family="monospace">F = 16</text>
+
+  <rect x="436" y="44" width="176" height="122" fill="#E9F3EE" stroke="#CBE2D6" stroke-width="1"/>
+  <text x="450" y="66" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">③ exp2</text>
+  <text x="450" y="90" font-size="11.5" fill="#22604A" font-family="monospace">d = 0 / .5 / 1 / 1.5</text>
+  <text x="450" y="110" font-size="11.5" fill="#22604A" font-family="monospace">e = 65536 / 39759</text>
+  <text x="450" y="130" font-size="11.5" fill="#22604A" font-family="monospace">　　 24112 / 14626</text>
+  <text x="450" y="152" font-size="11" fill="#3D7A60" font-family="monospace">F = 16</text>
+
+  <rect x="644" y="44" width="196" height="122" fill="#E9F3EE" stroke="#CBE2D6" stroke-width="1"/>
+  <text x="658" y="66" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">④ 归一 + P·V</text>
+  <text x="658" y="90" font-size="11.5" fill="#22604A" font-family="monospace">T = 144 033</text>
+  <text x="658" y="110" font-size="11.5" fill="#22604A" font-family="monospace">R = 7 633 748</text>
+  <text x="658" y="130" font-size="11.5" fill="#22604A" font-family="monospace">Σp = 65 536 → 1.0</text>
+  <text x="658" y="152" font-size="11" fill="#3D7A60" font-family="monospace">y = 3340（F=13）</text>
+
+  <line x1="198" y1="105" x2="224" y2="105" stroke="#A9A395" stroke-width="1.2" marker-end="url(#ar)"/>
+  <line x1="406" y1="105" x2="432" y2="105" stroke="#A9A395" stroke-width="1.2" marker-end="url(#ar)"/>
+  <line x1="614" y1="105" x2="640" y2="105" stroke="#A9A395" stroke-width="1.2" marker-end="url(#ar)"/>
+
+  <rect x="20" y="180" width="820" height="26" fill="#FFFFFF" stroke="#E4E0D6" stroke-width="1"/>
+  <text x="34" y="197" font-size="12" fill="#45423B" font-family="monospace">⑤ fix2fp16：3340 → expf = 13, mant = 646 → 0x3686 → 0.407715</text>
+</svg>
+<figcaption><b>图 1</b>　本例的数字全程。每一步的整数都能在下面的表里手算复现；最后一步恰好可以精确表示，所以输出误差是 0。</figcaption>
+</figure>
+
+<section>
+  <h2 class="sec"><span class="num">00</span>输入与量化</h2>
+  <p class="sub">FP16 只在边界存在，进模块第一件事就是变成 Q13 定点。</p>
+
+  <p>取一行 query <code>q = (1.0, 1.0, 1.0, 1.0)</code>，四个 key 每一维都相同（这样点积能手算）：</p>
+  <div class="tw">
+  <table>
+    <caption>为了让数字干净，K 的四个 key 取成常向量方向。真实向量当然不是这样，但算术路径完全一样。</caption>
+    <thead><tr><th>key</th><th class="num">每维真值</th><th class="num">Q13 整数</th><th class="num">q·k 的真值</th><th class="num">S = (q·k)/4</th></tr></thead>
+    <tbody>
+      <tr><td>k0</td><td class="num">1.0</td><td class="num">8 192</td><td class="num">4.0</td><td class="num">1.000</td></tr>
+      <tr><td>k1</td><td class="num">0.5</td><td class="num">4 096</td><td class="num">2.0</td><td class="num">0.500</td></tr>
+      <tr><td>k2</td><td class="num">0.0</td><td class="num">0</td><td class="num">0.0</td><td class="num">0.000</td></tr>
+      <tr><td>k3</td><td class="num">−0.5</td><td class="num">−4 096</td><td class="num">−2.0</td><td class="num">−0.500</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">RTL 对应</span>
+    <p><code>rtl/core/fp16_quant.sv:36-56</code>。注意它<b>没有乘法器</b>：FP16 的指数域可以直接折算成移位量，
+    <code>sh = e − 25 + QF</code>，左移精确、右移配 RNE，最后按符号取负并饱和到 16 位。</p>
+  </div>
+  <p><b>为什么这样设计</b>：整份设计只允许在这一个点"进数据"。之后所有中间量都是整数，
+  乘加是精确的，误差只来自<b>被模型写死的那几处近似</b>（量化、exp、倒数）。这是"逐位一致"能被验证的前提。</p>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">01</span>Q·Kᵀ 与那个 ÷4</h2>
+  <p class="sub">累加在整数域做，÷4 藏在一次右移里，整个点积只舍入一次。</p>
+
+  <p>单项乘积 <code>8192 × 8192 = 67 108 864</code>（= 2²⁶），四项相加：</p>
+  <div class="eq">acc = 4 × 2²⁶ = 268 435 456 = 2²⁸　→　acc ≫ 12 = 65 536　（F = 16 解释为 1.0）</div>
+
+  <p><code>SH_S = 2·QF + 2 − S_FRAC = 26 + 2 − 16 = 12</code>。这里的 <b>+2 就是 ÷4</b>：
+  右移 12 位等于"先除以 2²⁶变成真值、再除以 4、再乘回 2¹⁶"。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>key</th><th class="num">单项积</th><th class="num">acc（4 项）</th><th class="num">acc ≫ 12</th><th class="num">S 存的整数（F=16）</th><th class="num">S 真值</th></tr></thead>
+    <tbody>
+      <tr><td>k0</td><td class="num">67 108 864</td><td class="num">268 435 456</td><td class="num">65 536</td><td class="num">65 536</td><td class="num">1.000</td></tr>
+      <tr><td>k1</td><td class="num">33 554 432</td><td class="num">134 217 728</td><td class="num">32 768</td><td class="num">32 768</td><td class="num">0.500</td></tr>
+      <tr><td>k2</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0.000</td></tr>
+      <tr><td>k3</td><td class="num">−33 554 432</td><td class="num">−134 217 728</td><td class="num">−32 768</td><td class="num">−32 768</td><td class="num">−0.500</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">RTL 对应</span>
+    <p><code>top_ref.sv:111</code> 的 <code>qk_prod = qm[{ci,ck}] × km[{cj,ck}]</code>，<code>:174</code> 在最后一拍
+    <code>attn_rne_shift(acc + qk_prod, SH_S)</code>。K 取的是<b>行</b>——因为 <code>Q·Kᵀ</code> 的第 j 列就是 K 的第 j 行，
+    转置不需要搬数据，只改下标。</p>
+  </div>
+  <p><b>为什么累加到 64 位、为什么只舍一次</b>：整数加法可结合，所以后面无论换成 4 lane 还是 8 lane，
+  只要"不溢出 + 中途不舍入"，和就不变。这一条是后面方案 A/B 敢重排调度的全部依据。</p>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">02</span>先减最大值</h2>
+  <p class="sub">不是数值技巧，是定点格式的生存条件。</p>
+
+  <p>这一行 <code>max = 65 536</code>，于是 <code>d = max − S</code>：</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>key</th><th class="num">S</th><th class="num">d = max − S（F=16）</th><th class="num">d 真值</th></tr></thead>
+    <tbody>
+      <tr><td>k0</td><td class="num">65 536</td><td class="num">0</td><td class="num">0.0</td></tr>
+      <tr><td>k1</td><td class="num">32 768</td><td class="num">32 768</td><td class="num">0.5</td></tr>
+      <tr><td>k2</td><td class="num">0</td><td class="num">65 536</td><td class="num">1.0</td></tr>
+      <tr><td>k3</td><td class="num">−32 768</td><td class="num">98 304</td><td class="num">1.5</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout bad">
+    <span class="lbl">不减会怎样</span>
+    <p>真实规模下 <code>|S| ≤ 64</code>，若直接算 <code>e^{S}</code>，<code>e^{64} ≈ 6.2×10²⁷</code>；
+    而 e 的定点格式是 17 位、上限 65 536。整条通路会直接饱和成一堆 1.0，softmax 失去分辨力。
+    减掉最大值后 <code>e ≤ 1</code>，一定装得下；而 d 大到 16 以上时 <code>2^(−d) &lt; 2^(−16)</code>，自然 flush 成 0——
+    <b>大的 d 优雅地消失，而不是撑爆格式</b>。</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">03</span>exp2：一张 33 项的表怎么算</h2>
+  <p class="sub">这里最容易讲错：中间量 t 已经乘过 log2e，最后的 e 才等于 e^(−d)。</p>
+
+  <p>先看最关键的一步换算。硬件算的是 <code>2^(−t)</code>，其中 <code>t = d · log2(e)</code>，
+  所以 <code>2^(−t) = e^(−d)</code>。log2e 用 Q16 存成常数 <code>94548</code>。</p>
+
+  <p>取 <b>d = 1.0</b>（定点 65 536）走一遍：</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th class="c">#</th><th>步骤</th><th class="num">值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td><code>t = RNE(d × 94548, ≫16)</code></td><td class="num">94 548</td><td>= 1.0 × 1.442695，恰为整数</td></tr>
+      <tr><td class="c">2</td><td><code>n = t ≫ 16</code></td><td class="num">1</td><td>整数部分，最后靠移位实现 2^(−n)</td></tr>
+      <tr><td class="c">3</td><td><code>f = t[15:0]</code></td><td class="num">29 012</td><td>小数部分，Q16</td></tr>
+      <tr><td class="c">4</td><td><code>idx = f[15:12]</code></td><td class="num">7</td><td>16 段中的第 7 段</td></tr>
+      <tr><td class="c">5</td><td><code>rem = f[11:0]</code></td><td class="num">340</td><td>段内余量，12 位</td></tr>
+      <tr><td class="c">6</td><td><code>a = LUT(2·idx) = LUT(14)</code></td><td class="num">48 393</td><td>2^(−14/32) 的 Q16</td></tr>
+      <tr><td class="c">7</td><td><code>b = LUT(2·idx+2) = LUT(16)</code></td><td class="num">46 341</td><td>2^(−16/32) 的 Q16</td></tr>
+      <tr><td class="c">8</td><td><code>diff = b − a</code></td><td class="num">−2 052</td><td>表单调下降，必须按有符号算</td></tr>
+      <tr><td class="c">9</td><td><code>corr = RNE(diff × rem, ≫12)</code></td><td class="num">−170</td><td>线性插值修正项</td></tr>
+      <tr><td class="c">10</td><td><code>e2s = a + corr</code></td><td class="num">48 223</td><td>2^(−f) 的近似</td></tr>
+      <tr><td class="c">11</td><td><code>e = RNE(e2s ≫ n)</code></td><td class="num">24 112</td><td>余数 1 = half，且商为奇数 → 进位</td></tr>
+      <tr class="tot"><td class="c">12</td><td>对照真值 e^(−1)</td><td class="num">24 109.9</td><td>相对误差 1.1×10⁻⁴</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>四个 key 一起看，顺带验证"d 越大 e 越小"：</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th class="num">d</th><th class="num">t</th><th class="num">n</th><th class="num">f</th><th class="num">LUT 区间</th><th class="num">e（F=16）</th><th class="num">e / 65536</th><th class="num">e^(−d)</th></tr></thead>
+    <tbody>
+      <tr><td class="num">0.0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">A[0]–A[2]</td><td class="num">65 536</td><td class="num">1.00000</td><td class="num">1.00000</td></tr>
+      <tr><td class="num">0.5</td><td class="num">47 274</td><td class="num">0</td><td class="num">47 274</td><td class="num">A[22]–A[24]</td><td class="num">39 759</td><td class="num">0.60667</td><td class="num">0.60653</td></tr>
+      <tr><td class="num">1.0</td><td class="num">94 548</td><td class="num">1</td><td class="num">29 012</td><td class="num">A[14]–A[16]</td><td class="num">24 112</td><td class="num">0.36792</td><td class="num">0.36788</td></tr>
+      <tr><td class="num">1.5</td><td class="num">141 822</td><td class="num">2</td><td class="num">10 750</td><td class="num">A[4]–A[6]</td><td class="num">14 626</td><td class="num">0.22318</td><td class="num">0.22313</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">RTL 对应</span>
+    <p><code>rtl/core/exp2_unit.sv:49-76</code>，表在 <code>attn_math.svh:63-100</code>（33 项、17 位宽——
+    用 16 位存会把 65 536 截成 0，d=0 那一项的 e 就没了，整行 softmax 会崩，C 侧踩过这个坑）。</p>
+  </div>
+  <p><b>为什么以 2 为底</b>：整数部分变成一次移位，一分钱不花；只有小数部分需要电路。
+  这就是把超越函数压成"移位 + 一张小表"的标准手法，也是为什么表只需要覆盖 [0,1) 这一小段。</p>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">04</span>行求和与"每行一次倒数"</h2>
+  <p class="sub">把 16 个除法器换成 1 个除法器 + 16 个乘法器，面积换延迟。</p>
+
+  <div class="eq">T = 65 536 + 39 759 + 24 112 + 14 626 = 144 033　（F=16，真值 2.19777）</div>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>项</th><th class="num">值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>2⁴⁰</code></td><td class="num">1 099 511 627 776</td><td>被除数固定，只有第 40 位是 1</td></tr>
+      <tr><td><code>2⁴⁰ / T</code></td><td class="num">7 633 748.0145</td><td>T ∈ [2¹⁶, 2²⁰]，所以商 ≤ 2²⁴</td></tr>
+      <tr><td><code>R = RNE(2⁴⁰ / T)</code></td><td class="num">7 633 748</td><td>25 位够装（7.6M &lt; 16.7M）</td></tr>
+      <tr><td>耗时</td><td class="num">41 + 1 + 1 拍</td><td>长除法 / RNE 修正 / 交回</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">RTL 对应</span>
+    <p><code>rtl/core/recip_unit.sv:64-92</code>，恢复余数法：每拍把余数左移一位、与除数比较、决定商位。
+    舍入用 <code>2·rem</code> 与 <code>den</code> 比较实现 round-half-to-even，而不是"加 0.5 再截断"。</p>
+  </div>
+  <p><b>为什么值得</b>：16 次除法 = 16 个除法器；1 次倒数 + 16 次乘法 = 1 个除法器。延迟多付 43 拍，
+  面积省一大块，而且这 43 拍在 varB 的行流水里正好被藏进 A/C 级的 80 拍里（<code>41 &lt; 80</code>）。</p>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">05</span>归一化：p = e × R</h2>
+  <p class="sub">p 用 17 位不是为了精度，是为了能表示恰好 1.0。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>key</th><th class="num">e</th><th class="num">e × R</th><th class="num">÷ 2²⁴</th><th class="num">RNE</th><th class="num">p（F=16）</th><th class="num">p / 65536</th><th class="num">e/T 精确值</th></tr></thead>
+    <tbody>
+      <tr><td>k0</td><td class="num">65 536</td><td class="num">500 285 308 928</td><td class="num">29 819.33</td><td class="num">29 819</td><td class="num">29 819</td><td class="num">0.45500</td><td class="num">0.45506</td></tr>
+      <tr><td>k1</td><td class="num">39 759</td><td class="num">303 510 186 732</td><td class="num">18 090.62</td><td class="num">18 091</td><td class="num">18 091</td><td class="num">0.27605</td><td class="num">0.27601</td></tr>
+      <tr><td>k2</td><td class="num">24 112</td><td class="num">184 064 931 776</td><td class="num">10 971.12</td><td class="num">10 971</td><td class="num">10 971</td><td class="num">0.16740</td><td class="num">0.16740</td></tr>
+      <tr><td>k3</td><td class="num">14 626</td><td class="num">111 651 198 248</td><td class="num">6 654.93</td><td class="num">6 655</td><td class="num">6 655</td><td class="num">0.10155</td><td class="num">0.10153</td></tr>
+      <tr class="tot"><td>Σ</td><td class="num">144 033</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">65 536</td><td class="num">1.00000</td><td class="num">1.00000</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>右移量 <code>SH_P = RECIP_SH − P_FRAC = 40 − 16 = 24</code>。验算 k0：
+  <code>65 536 × 7 633 748 / 2²⁴ = 29 819.33 → 29 819</code>，与精确值 0.45506 差 6×10⁻⁵。</p>
+
+  <div class="callout warn">
+    <span class="lbl">两处容易被追问</span>
+    <p><b>17 位</b>：上限 65 536 正好是 1.0，16 位会被截成 0。<b>饱和而不是回绕</b>：
+    舍入误差可能让 p 略微超过 1.0，饱和保证它是"合法的概率"，而不是变成一个负数。</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">06</span>P·V 与输出</h2>
+  <p class="sub">V 按列取（步长 16），最后一拍右移成 F=13，再转 FP16。</p>
+
+  <p>取 V 的第 j 列为 <code>(1.0, 0.5, −0.5, −1.0)</code>，定点 <code>(8192, 4096, −4096, −8192)</code>：</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>key</th><th class="num">p（F=16）</th><th class="num">v（Q13）</th><th class="num">p × v</th></tr></thead>
+    <tbody>
+      <tr><td>k0</td><td class="num">29 819</td><td class="num">8 192</td><td class="num">244 277 248</td></tr>
+      <tr><td>k1</td><td class="num">18 091</td><td class="num">4 096</td><td class="num">74 100 736</td></tr>
+      <tr><td>k2</td><td class="num">10 971</td><td class="num">−4 096</td><td class="num">−44 937 216</td></tr>
+      <tr><td>k3</td><td class="num">6 655</td><td class="num">−8 192</td><td class="num">−54 517 760</td></tr>
+      <tr class="tot"><td>acc</td><td class="num">—</td><td class="num">—</td><td class="num">218 923 008</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="eq">y = RNE(acc ≫ 16) = 218 923 008 / 65 536 = 3 340.5 → <b>3 340</b>（恰好落在半格上，RNE 取偶数）</div>
+
+  <p><code>SH_Y = P_FRAC + Q_FRAC − Y_FRAC = 16 + 13 − 13 = 16</code>，得到 F=13 的整数 3 340，真值 0.407715。</p>
+
+  <div class="callout bad">
+    <span class="lbl">这里真的踩到 tie 了</span>
+    <p>218 923 008 / 65 536 <b>正好是 3 340.5</b>，不是"接近"。RNE 规则：半格且商为偶数 → 不进位 → 3 340。
+    若用四舍五入（round-half-up）会得 3 341，最后 FP16 差 1 个 LSB，逐位比对就挂了。
+    <b>这不是巧合问题，是判据问题</b>：模型和 RTL 必须用同一条舍入规则，而这条规则就是 RNE。</p>
+  </div>
+
+  <h3>最后一步：定点 → FP16</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>量</th><th class="num">值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>y</code>（F=13）</td><td class="num">3 340</td><td>非零，所以必在正规区（|y| ≥ 1）</td></tr>
+      <tr><td>最高位号 <code>p</code></td><td class="num">11</td><td>2¹¹ ≤ 3340 &lt; 2¹²</td></tr>
+      <tr><td><code>sh = p − 10</code></td><td class="num">1</td><td>尾数只要 11 位</td></tr>
+      <tr><td><code>q = RNE(3340 ≫ 1)</code></td><td class="num">1 670</td><td>余数 0，无需舍入</td></tr>
+      <tr><td><code>expf = p − 13 + 15</code></td><td class="num">13 = 0b01101</td><td>FP16 的偏置指数</td></tr>
+      <tr><td><code>mant = q[9:0]</code></td><td class="num">646 = 0b1010000110</td><td>隐去最高位 1</td></tr>
+      <tr class="tot"><td>FP16 位模式</td><td class="num">0x3686</td><td>0 01101 1010000110</td></tr>
+      <tr><td>解释回实数</td><td class="num">0.407715</td><td>2⁻² × (1 + 646/1024)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout key">
+    <span class="lbl">RTL 对应</span>
+    <p><code>rtl/core/fix2fp16.sv:36-72</code>。它敢省掉对阶、次正规、长 sticky 链，
+    是因为输入是"F=13 的整数"：非零就 ≥ 1，永远进不了次正规区。<b>约束越强，电路越小。</b></p>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec"><span class="num">07</span>本例的误差账</h2>
+  <p class="sub">误差只有四个来源，而且每一个都能指到具体一行代码。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>来源</th><th class="num">本例误差</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>输入量化</td><td class="num">0</td><td>所有输入都是 2 的幂，Q13 能精确表示</td></tr>
+      <tr><td>exp2 的 LUT + 插值</td><td class="num">1.1×10⁻⁴（相对）</td><td>24 112 vs 真值 24 109.9</td></tr>
+      <tr><td>倒数 R 的截断</td><td class="num">≈2×10⁻⁹（相对）</td><td>余数 2 092 / 144 033，再除 7.6M</td></tr>
+      <tr><td>归一与输出的 RNE</td><td class="num">≤ 0.5 LSB</td><td>p 的 1 LSB = 7.6×10⁻⁶；FP16 本例正好精确</td></tr>
+      <tr class="tot"><td>合计</td><td class="num">~1×10⁻⁴</td><td>判据 0.06，余量约 500×</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>三个容易讲错的地方</h3>
+  <ul>
+    <li><b>把 LUT 说成"e 的表"</b>。它存的是 <code>2^(−k/32)</code>，中间量 t 已经乘过 log2e；
+    <code>2^(−t)</code> 才等于 <code>e^(−d)</code>。答辩时这句话说反，等于没读懂电路。</li>
+    <li><b>以为舍入无所谓</b>。本例的 y 恰好是 3 340.5，RNE 取偶数得 3 340；换成 round-half-up 得 3 341，
+    逐位比对立刻挂。判据说的是"与自身模型逐位一致"，不是"差不多"。</li>
+    <li><b>把 Σp = 65 536 当断言</b>。这一例恰好凑成整 1.0，一般情况是 65 536 ± 几个 LSB。
+    它是"自检的观察量"，不是"必须成立的等式"。</li>
+  </ul>
+</section>
+
+<section id="s08">
+  <h2 class="sec"><span class="num">08</span>回到全规模：16 个 key、16 维</h2>
+  <p class="sub">同一份代码，L 和 d 都放回 16。算术一步没变，变的是累加深度和数值分布。</p>
+
+  <p>全规模下 Q、K、V 各是 16×16。要仍然<b>逐位可验</b>，取值收在三电平 <code>1.0 / 0 / −1.0</code>：
+  每个乘积只剩 <code>±2²⁶</code> 或 <code>0</code>，16 项累加退化成"数符号"，纸面能对。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>矩阵</th><th class="num">本例取值</th><th class="num">形状</th><th>这样取的理由</th></tr></thead>
+    <tbody>
+      <tr><td>Q</td><td class="num">16 维全 8 192</td><td class="num">1×16</td><td>行间无依赖，算一行即代表 16 行</td></tr>
+      <tr><td>K 第 j 行</td><td class="num">前 j 个 −8 192，其余 0</td><td class="num">16×16</td><td>点积 = −j·2²⁶ → S = −j/4，d 落在 0…3.75 的 ¼ 栅格上</td></tr>
+      <tr><td>V 第 j 列</td><td class="num">k ≥ j 时为 8 192</td><td class="num">16×16</td><td>上三角 0/1 掩码 → y 就是 p 的一段后缀和 ÷ 8</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>行方向只算 1 行是合法简化（16 行之间零依赖，同一段 RTL 跑 16 次）；<b>列方向不能简化</b>，
+  因为 16 就是累加深度本身。这正是 §00–§07 那个微例真正走样的地方。</p>
+
+  <h3>Q·Kᵀ：第 16 拍才舍入一次</h3>
+  <p>第 j 行 K 有 j 个 −1.0、其余 0，所以 <code>acc = −j × 8 192 × 8 192 = −j·2²⁶</code>，
+  右移 <code>SH_S = 2·13 + 2 − 16 = 12</code> 位得 <code>S = −j·16 384</code>（Q16），真值为 <code>−j/4</code>。</p>
+
+  <div class="callout key">
+    <span class="lbl">累加器在这里才真的被压到边界</span>
+    <p>j=15 时 <code>acc = −1 006 632 960</code>，是 <code>2³⁰</code> 的 93.75%——正好贴着"16 项 × 2²⁶"的上界。
+    64 位累加器仍富余 30 多位，所以"不溢出"成立。但要注意：<b>4 列时 |acc| 最多 2²⁸，这条前提根本没被检验过</b>。</p>
+  </div>
+
+  <h3>softmax：16 行全量</h3>
+  <p>本例 d 都是 16 384 的整数倍，于是 <code>t = RNE(d × 94 548, ≫16) = 23 637·j</code> 恰好整除，
+  这一级一次舍入都没触发（真实激励会触发，见下面的"未覆盖"清单）。</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th class="c">j</th><th class="num">S（Q16）</th><th class="num">d = max − S</th><th class="num">t = d·log2e</th><th class="num">n</th><th class="num">idx</th><th class="num">rem</th><th class="num">e = 2^(−d)</th><th class="num">p = e×R</th></tr></thead>
+    <tbody>
+      <tr><td class="c">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">65 536</td><td class="num">14 765</td></tr>
+      <tr><td class="c">1</td><td class="num">−16 384</td><td class="num">16 384</td><td class="num">23 637</td><td class="num">0</td><td class="num">5</td><td class="num">3 157</td><td class="num">51 048</td><td class="num">11 501</td></tr>
+      <tr><td class="c">2</td><td class="num">−32 768</td><td class="num">32 768</td><td class="num">47 274</td><td class="num">0</td><td class="num">11</td><td class="num">2 218</td><td class="num">39 759</td><td class="num">8 957</td></tr>
+      <tr><td class="c">3</td><td class="num">−49 152</td><td class="num">49 152</td><td class="num">70 911</td><td class="num">1</td><td class="num">1</td><td class="num">1 279</td><td class="num">30 963</td><td class="num">6 976</td></tr>
+      <tr><td class="c">4</td><td class="num">−65 536</td><td class="num">65 536</td><td class="num">94 548</td><td class="num">1</td><td class="num">7</td><td class="num">340</td><td class="num">24 112</td><td class="num">5 432</td></tr>
+      <tr><td class="c">5</td><td class="num">−81 920</td><td class="num">81 920</td><td class="num">118 185</td><td class="num">1</td><td class="num">12</td><td class="num">3 497</td><td class="num">18 779</td><td class="num">4 231</td></tr>
+      <tr><td class="c">6</td><td class="num">−98 304</td><td class="num">98 304</td><td class="num">141 822</td><td class="num">2</td><td class="num">2</td><td class="num">2 558</td><td class="num">14 626</td><td class="num">3 295</td></tr>
+      <tr><td class="c">7</td><td class="num">−114 688</td><td class="num">114 688</td><td class="num">165 459</td><td class="num">2</td><td class="num">8</td><td class="num">1 619</td><td class="num">11 391</td><td class="num">2 566</td></tr>
+      <tr><td class="c">8</td><td class="num">−131 072</td><td class="num">131 072</td><td class="num">189 096</td><td class="num">2</td><td class="num">14</td><td class="num">680</td><td class="num">8 870</td><td class="num">1 998</td></tr>
+      <tr><td class="c">9</td><td class="num">−147 456</td><td class="num">147 456</td><td class="num">212 733</td><td class="num">3</td><td class="num">3</td><td class="num">3 837</td><td class="num">6 908</td><td class="num">1 556</td></tr>
+      <tr><td class="c">10</td><td class="num">−163 840</td><td class="num">163 840</td><td class="num">236 370</td><td class="num">3</td><td class="num">9</td><td class="num">2 898</td><td class="num">5 381</td><td class="num">1 212</td></tr>
+      <tr><td class="c">11</td><td class="num">−180 224</td><td class="num">180 224</td><td class="num">260 007</td><td class="num">3</td><td class="num">15</td><td class="num">1 959</td><td class="num">4 191</td><td class="num">944</td></tr>
+      <tr><td class="c">12</td><td class="num">−196 608</td><td class="num">196 608</td><td class="num">283 644</td><td class="num">4</td><td class="num">5</td><td class="num">1 020</td><td class="num">3 264</td><td class="num">735</td></tr>
+      <tr><td class="c">13</td><td class="num">−212 992</td><td class="num">212 992</td><td class="num">307 281</td><td class="num">4</td><td class="num">11</td><td class="num">81</td><td class="num">2 541</td><td class="num">572</td></tr>
+      <tr><td class="c">14</td><td class="num">−229 376</td><td class="num">229 376</td><td class="num">330 918</td><td class="num">5</td><td class="num">0</td><td class="num">3 238</td><td class="num">1 979</td><td class="num">446</td></tr>
+      <tr><td class="c">15</td><td class="num">−245 760</td><td class="num">245 760</td><td class="num">354 555</td><td class="num">5</td><td class="num">6</td><td class="num">2 299</td><td class="num">1 542</td><td class="num">347</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>行和与倒数（一行一次，不分列）：</p>
+  <div class="eq">T = Σe = 290 890 = 4.4386 × 65 536（上界 2²⁰ 的 27.7%）　→　R = RNE(2⁴⁰ / T) = <b>3 779 819</b>　（1/T = 3.43764×10⁻⁶）</div>
+
+  <div class="callout warn">
+    <span class="lbl">Σp 不是 1.0</span>
+    <p>Σp = <b>65 533</b>，比 65 536 少 3 个 LSB。§05 那例"Σp 恰好 65 536"是凑巧，一般情况差几个 LSB。
+    这 3 个 LSB 有下游后果：<code>y₀</code> 的精确值是 8 191.625，而不是 8 192——于是又踩了一次舍入（这次是普通进位，不是 tie）。</p>
+  </div>
+
+  <h3>P·V：一次拿满 16 个输出</h3>
+  <p>V 第 j 列是 0/1 掩码，<code>acc = 8 192 × Σ<sub>c≥j</sub> p<sub>c</sub></code>，<code>y = RNE(acc ≫ 16)</code>：</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th class="c">j</th><th class="num">Σ<sub>c≥j</sub> p</th><th class="num">acc</th><th class="num">acc / 65 536</th><th class="num">y（Q13）</th><th class="num">y 真值</th><th class="num">FP16</th></tr></thead>
+    <tbody>
+      <tr><td class="c">0</td><td class="num">65 533</td><td class="num">536 846 336</td><td class="num">8 191.625</td><td class="num">8 192</td><td class="num">1.000000</td><td class="num">0x3C00</td></tr>
+      <tr><td class="c">1</td><td class="num">50 768</td><td class="num">415 891 456</td><td class="num">6 346.0</td><td class="num">6 346</td><td class="num">0.774658</td><td class="num">0x3A32</td></tr>
+      <tr><td class="c">2</td><td class="num">39 267</td><td class="num">321 675 264</td><td class="num">4 908.375</td><td class="num">4 908</td><td class="num">0.599121</td><td class="num">0x38CB</td></tr>
+      <tr><td class="c">3</td><td class="num">30 310</td><td class="num">248 299 520</td><td class="num">3 788.75</td><td class="num">3 789</td><td class="num">0.462524</td><td class="num">0x3766</td></tr>
+      <tr><td class="c">4</td><td class="num">23 334</td><td class="num">191 152 128</td><td class="num">2 916.75</td><td class="num">2 917</td><td class="num">0.356079</td><td class="num">0x35B2</td></tr>
+      <tr><td class="c">5</td><td class="num">17 902</td><td class="num">146 653 184</td><td class="num">2 237.75</td><td class="num">2 238</td><td class="num">0.273193</td><td class="num">0x345F</td></tr>
+      <tr><td class="c">6</td><td class="num">13 671</td><td class="num">111 992 832</td><td class="num">1 708.875</td><td class="num">1 709</td><td class="num">0.208618</td><td class="num">0x32AD</td></tr>
+      <tr><td class="c">7</td><td class="num">10 376</td><td class="num">85 000 192</td><td class="num">1 297.0</td><td class="num">1 297</td><td class="num">0.158325</td><td class="num">0x3111</td></tr>
+      <tr><td class="c">8</td><td class="num">7 810</td><td class="num">63 979 520</td><td class="num">976.25</td><td class="num">976</td><td class="num">0.119141</td><td class="num">0x2FA0</td></tr>
+      <tr><td class="c">9</td><td class="num">5 812</td><td class="num">47 611 904</td><td class="num">726.5</td><td class="num">726</td><td class="num">0.088623</td><td class="num">0x2DAC</td></tr>
+      <tr><td class="c">10</td><td class="num">4 256</td><td class="num">34 865 152</td><td class="num">532.0</td><td class="num">532</td><td class="num">0.064941</td><td class="num">0x2C28</td></tr>
+      <tr><td class="c">11</td><td class="num">3 044</td><td class="num">24 936 448</td><td class="num">380.5</td><td class="num">380</td><td class="num">0.046387</td><td class="num">0x29F0</td></tr>
+      <tr><td class="c">12</td><td class="num">2 100</td><td class="num">17 203 200</td><td class="num">262.5</td><td class="num">262</td><td class="num">0.031982</td><td class="num">0x2818</td></tr>
+      <tr><td class="c">13</td><td class="num">1 365</td><td class="num">11 182 080</td><td class="num">170.625</td><td class="num">171</td><td class="num">0.020874</td><td class="num">0x2558</td></tr>
+      <tr><td class="c">14</td><td class="num">793</td><td class="num">6 496 256</td><td class="num">99.125</td><td class="num">99</td><td class="num">0.012085</td><td class="num">0x2230</td></tr>
+      <tr><td class="c">15</td><td class="num">347</td><td class="num">2 842 624</td><td class="num">43.375</td><td class="num">43</td><td class="num">0.005249</td><td class="num">0x1D60</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout bad">
+    <span class="lbl">这一例里 tie 出现了三次，不是一次</span>
+    <p>j=9、11、12 的商是 <b>726.5 / 380.5 / 262.5</b>——三个真正的半格，而且商全是偶数，所以三个都不进位。
+    加上 §06 那次 3 340.5，RNE 的"半格取偶"规则有了四处互证。
+    对照的 8 191.625、170.625 是普通进位，<b>舍入方向相反，说明这不是"一律向下"</b>。</p>
+  </div>
+
+  <p>最小的输出 <code>y₁₅ = 43</code>，真值 5.2×10⁻³；设计的下界是 <code>|y| ≥ 1 → 1.2×10⁻⁴</code>，
+  仍高于 FP16 最小正规数 6.1×10⁻⁵，所以 <code>fix2fp16</code> 省掉次正规分支的前提在最坏情形下也站得住。</p>
+
+  <h3>那"缩到 4 列"究竟改变了什么</h3>
+  <div class="tw">
+  <table>
+    <thead><tr><th>性质</th><th class="num">微例 L=4</th><th class="num">全例 L=16</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>累加器峰值</td><td class="num">≤ 2²⁸</td><td class="num">15×2²⁶（2³⁰ 的 93.75%）</td><td>"64 位不溢出"这条前提，<b>微例里根本没被压到</b></td></tr>
+      <tr><td>T 占 2²⁰ 的比例</td><td class="num">13.7%</td><td class="num">27.7%</td><td>R 的位宽由 T 的<b>下界</b>（65 536）决定，R ≤ 2²⁴，与 L 无关；本例只用到 22 位</td></tr>
+      <tr><td>p 的 1 LSB 相对权重</td><td class="num">6.1×10⁻⁵</td><td class="num">2.4×10⁻⁴</td><td>均匀分布下 p ≈ 65 536/L，步长 = L/65 536，<b>L=16 差 4 倍</b>；微例会低估 softmax 的量化噪声</td></tr>
+      <tr><td>Σp</td><td class="num">65 536（恰好）</td><td class="num">65 533</td><td>"恰好等于 1.0"是巧合，不是恒等式</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="lbl">这一例仍未覆盖的分支</span>
+    <p>① <b>exp2 的 flush</b>（<code>n ≥ 16</code>，需要 d ≥ 16；本例 max d = 3.75）；
+    ② <b>p 的饱和</b>（需要舍入把 e/T 顶过 1.0）；
+    ③ <b>乘 log2e 那级的 RNE</b>（本例 t 恰好整除）。
+    这三条都靠"大 d"的激励覆盖，在回归的六类激励里，不在本页。
+    另外 K/V 取 0/±1 三电平而不是随机矩阵：随机矩阵下 256 个乘积只能声称"与脚本一致"，不能靠人眼。</p>
+  </div>
+
+  <p>所以正确的说法是：<b>微例演示"每一位怎么算"，全例演示"规模带来什么数值后果"，两者都不构成 16×16 的证明</b>——
+  证明在回归里（六类激励、逐位比对、RMSE 0.000187 / 0.002492）。本页只负责让人看懂那 9 665 拍里发生了什么。</p>
+</section>
+
+<footer>
+  <span>源文件：<code>docs/theory/03-一个例子的数值链路.html</code></span>
+  <span class="sep"></span>
+  <span>复算脚本：<code>docs/theory/verify_examples.py</code></span>
+  <span class="sep"></span>
+  <span>对应 RTL：<code>top_ref.sv</code> · <code>exp2_unit.sv</code> · <code>recip_unit.sv</code> · <code>fp16_quant.sv</code> · <code>fix2fp16.sv</code></span>
+  <span>2026-10-31</span>
+</footer>
+
+</div>
+</body>
+</html>
