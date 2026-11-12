@@ -47,6 +47,10 @@ module top_ref `ATTN_TOP_PORTS;
   localparam int SH_S = 2*Q_FRAC + 2 - S_FRAC;   // QF=13 -> 12 ; QF=7 -> 0
   localparam int SH_P = RECIP_SH - P_FRAC;       // 24
   localparam int SH_Y = P_FRAC + Q_FRAC - Y_FRAC;// QF=13 -> 16 ; QF=7 -> 10
+  // 常量 RNE 宏要求 K >= 1；SH_S 在 QF=7 的配置下正好是 0（移位即恒等），
+  // 用 localparam 常量条件把那一支摘掉，死掉的一边不会进网表。
+  localparam int K_S     = (SH_S > 0) ? SH_S : 1;
+  localparam bit SH_S_ON = (SH_S > 0);
 
   // softmax 的内部相位（substate）；主状态机只占 state_t 里的一个状态
   typedef enum logic [1:0] {
@@ -63,13 +67,13 @@ module top_ref `ATTN_TOP_PORTS;
   logic signed [31:0]   sm   [0:NELEM-1];   // S，F=S_FRAC
   logic        [16:0]   pu   [0:NELEM-1];   // P，F=P_FRAC，[0, 65536]
   logic        [16:0]   erow [0:15];        // 当前行的 e，F=16
-  logic        [15:0]   om   [0:NELEM-1];   // 输出 FP16
+  // 输出不再缓存整块：P·V 的完成顺序天然是 (ci,cj) 字典序递增，
+  // 每个元素算完当拍直接送到 o_* 端口（tb 按流式采样，见 tb_attn.sv:247）。
 
   // ---------------------------------------------------------------- 状态
   state_t  st;
   sm_ph_t  smph;
   logic [3:0] ci, cj, ck;
-  logic [7:0] cout;
 
   logic signed [63:0] acc;
   logic signed [31:0] maxv;
@@ -106,6 +110,9 @@ module top_ref `ATTN_TOP_PORTS;
   logic signed [63:0] qk_prod;
   logic signed [63:0] pv_prod;
   logic signed [63:0] pr_c;
+  // 常量 RNE 宏里操作数会被引用多次，必须先落到独立的一根线上，
+  // 否则综合器要展开好几份相同的乘法器/加法器。
+  logic signed [63:0] qk_acc, pv_acc, pr_mul;
 
   // S = Q·Kᵀ：K 按行取（kf[j][k]），所以是 dot(q_row_i, k_row_j)
   assign qk_prod = $signed(qm[{ci, ck}]) * $signed(km[{cj, ck}]);
@@ -114,11 +121,16 @@ module top_ref `ATTN_TOP_PORTS;
   assign pv_prod = $signed({1'b0, pu[{ci, ck}]}) * $signed(vm[{ck, cj}]);
 
   // softmax 的 d 与归一化乘法
-  assign d_fx = maxv - sm[{ci, cj}];
-  assign pr_c = attn_rne_shift($signed({47'd0, erow[cj]}) * $signed({39'd0, rval}), SH_P);
+  assign d_fx   = maxv - sm[{ci, cj}];
+  assign pr_mul = $signed({47'd0, erow[cj]}) * $signed({39'd0, rval});
+  assign pr_c   = `ATTN_RNE_SHR(pr_mul, SH_P);
 
   // P·V 的最后一个累加 → 定点 → FP16
-  assign y_fx = attn_rne_shift(acc + pv_prod, SH_Y);
+  assign pv_acc = acc + pv_prod;
+  assign y_fx   = `ATTN_RNE_SHR(pv_acc, SH_Y);
+
+  // S = Q·Kᵀ 的累加和
+  assign qk_acc = acc + qk_prod;
 
   // ---------------------------------------------------------------- 装载
   always_ff @(posedge clk) begin
@@ -140,7 +152,6 @@ module top_ref `ATTN_TOP_PORTS;
       ci        <= 4'd0;
       cj        <= 4'd0;
       ck        <= 4'd0;
-      cout      <= 8'd0;
       acc       <= 64'sd0;
       maxv      <= 32'sd0;
       tsum      <= 21'd0;
@@ -153,6 +164,8 @@ module top_ref `ATTN_TOP_PORTS;
       o_data    <= 16'd0;
     end else begin
       done <= 1'b0;
+      // o_vld 必须是单拍脉冲，流式输出下每拍都要先归零，否则会一直挂着
+      o_vld <= 1'b0;
 
       case (st)
         // ------------------------------------------------------ 等启动
@@ -171,7 +184,7 @@ module top_ref `ATTN_TOP_PORTS;
         // ------------------------------------------------------ S = Q·Kᵀ
         S_QK: begin
           if (ck == 4'd15) begin
-            sm[{ci, cj}] <= attn_rne_shift(acc + qk_prod, SH_S);
+            sm[{ci, cj}] <= SH_S_ON ? `ATTN_RNE_SHR(qk_acc, K_S) : qk_acc;
             acc <= 64'sd0;
             ck  <= 4'd0;
             if (cj == 4'd15) begin
@@ -257,16 +270,17 @@ module top_ref `ATTN_TOP_PORTS;
         // ------------------------------------------------------ Y = P·V
         S_PV: begin
           if (ck == 4'd15) begin
-            om[{ci, cj}] <= y_fp;
+            o_vld  <= 1'b1;
+            o_addr <= {ci, cj};
+            o_data <= y_fp;
             acc <= 64'sd0;
             ck  <= 4'd0;
             if (cj == 4'd15) begin
               cj <= 4'd0;
               if (ci == 4'd15) begin
                 ci   <= 4'd0;
-                cout <= 8'd0;
-                done <= 1'b1;          // done 与输出流水线并行，只作计时标记
-                st   <= S_OUT;
+                done <= 1'b1;          // 最后一个元素已送出，done 与它同拍
+                st   <= S_DONE;
               end else begin
                 ci <= ci + 4'd1;
               end
@@ -277,16 +291,6 @@ module top_ref `ATTN_TOP_PORTS;
             acc <= acc + pv_prod;
             ck  <= ck + 4'd1;
           end
-        end
-
-        // ------------------------------------------------------ 结果回读
-        // o_addr 必须严格递增，tb 用递增做协议检查。
-        S_OUT: begin
-          o_vld  <= 1'b1;
-          o_addr <= cout;
-          o_data <= om[cout];
-          if (cout == 8'd255) st   <= S_DONE;
-          else                cout <= cout + 8'd1;
         end
 
         S_DONE: begin

@@ -49,6 +49,10 @@ fascia/
 hw/runs/**
 !hw/runs/.gitkeep
 
+# ---- 虚拟机侧的 commit 戳（同步脚本写入，内容每次不同，不入库）----
+# VM 上的 /root/work/hw 是拷贝，没有 .git；manifest 靠这个文件把结果绑到 commit。
+hw/.commit
+
 # ---- 覆盖率数据库与报告（urg 生成，可随时重算）----
 *.vdb/
 simv.vdb/

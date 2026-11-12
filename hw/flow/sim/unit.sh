@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  flow/sim/unit.sh —— 编译并运行四个单元 tb（fp16_quant / exp2 / fix2fp16 / recip）
+#  flow/sim/unit.sh —— 编译并运行五个单元 tb（fp16_quant / exp2 / fix2fp16 / recip / rne_eq）
 #
 #  用法： bash flow/sim/unit.sh <variant> <tag>
 #         ONLY=exp2 bash flow/sim/unit.sh ref unit-ref     # 只跑一个
@@ -9,7 +9,7 @@
 #  产出： runs/<tag>/unit_<name>.log        每个单元的完整日志
 #         runs/<tag>/unit/<...>/build_*.log 编译日志
 #
-#  退出码：0 = 四个全 PASS，1 = 有失败（make 会因此停下）
+#  退出码：0 = 五个全 PASS，1 = 有失败（make 会因此停下）
 #
 #  ── 为什么单元 tb 单独一条链，不塞进 build.sh ────────────────────────
 #  build.sh 编的是"一个方案的顶层 + 系统级 tb"，一个 simv 跑六类激励；
@@ -34,7 +34,7 @@ INC="+incdir+rtl/common +incdir+rtl/core"
 DEFS="+define+ATTN_QB=$QB +define+ATTN_QF=$QF +define+ATTN_LUT=$LUT"
 
 # 名字 → 被测源文件（顺序必须与 tb 文件名对齐）
-NAMES="fp16_quant exp2 fix2fp16 recip"
+NAMES="fp16_quant exp2 fix2fp16 recip rne_eq"
 
 echo "[unit] variant=$VARIANT cfg=qb${QB}qf${QF}/lut${LUT} → $OUT"
 
@@ -50,6 +50,10 @@ for n in $NAMES; do
         exp2)       SRC="rtl/core/exp2_unit.sv"   TB="tb/unit/tb_unit_exp2.sv"       ;;
         fix2fp16)   SRC="rtl/core/fix2fp16.sv"    TB="tb/unit/tb_unit_fix2fp16.sv"   ;;
         recip)      SRC="rtl/core/recip_unit.sv"  TB="tb/unit/tb_unit_recip.sv"      ;;
+        # rne_eq 只测 attn_math.svh 里的两套移位实现，没有独立源文件：
+        # 头文件本来就已经作为设计文件列在编译命令里（见下面那段注释），
+        # 不能再列一次，否则 ifndef 守卫会把它整个跳过。
+        rne_eq)     SRC=""                          TB="tb/unit/tb_unit_rne_eq.sv"   ;;
         *) continue ;;
     esac
 
@@ -66,7 +70,7 @@ for n in $NAMES; do
             rtl/common/attn_pkg.sv \
             rtl/core/attn_math.svh \
             tb/unit/unit_ref_pkg.sv \
-            "$SRC" "$TB" \
+            $SRC "$TB" \
             -Mdir="$BINDIR/csrc_$n" \
             -o "$BINDIR/simv_$n" \
             >> "$BINDIR/build_$n.log" 2>&1; then

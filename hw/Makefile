@@ -6,6 +6,7 @@
 #  常用：
 #    make vec  SEED=20260101
 #    make sim  VARIANT=varA TAG=varA-ke8-w8
+#    make pair VARIANT=varA TAG=varA-tt MODE=full   # 仿真+综合同一 TAG → A/D/E 齐全
 #    make syn  VARIANT=varA TAG=varA-ke8-w8
 #    make power VARIANT=varA TAG=varA-ke8-w8
 #    make collect      # 扫 runs/ → results/metrics.csv
@@ -20,6 +21,11 @@ TAG     ?= $(VARIANT)
 SEED    ?= 20260101
 SIM     ?= vcs
 SYN     ?= genus
+# 工艺标签：跨工艺的数据必须能在 tag 上分开。
+# 否则 ref-tt 到底指 GPDK045 的 tt 还是 SMIC40 的 tt，谁也说不清 ——
+# 而两个工艺的同名 tag 会落到同一个 runs/ 目录，后跑的覆盖先跑的。
+# pairall 用它拼 tag（ref-sm40-tt / varB-g45-tt）。
+PDKTAG  := $(if $(filter SC9MC,$(PDK)),sm40,g45)
 # 综合并行映射进程数：按实测内存自动定档（实测 4 线程峰值仅 1.5 GB）。
 #   7 GB 机器上 8 线程会在 technology mapping 阶段被 OOM killer SIGKILL
 #   （日志停在 "Multi-threaded Technology Mapping"、无任何报告）；
@@ -57,7 +63,7 @@ export PDK CORNER SYN_LIB SYN_LEF SYN_DRIVE_CELL SYN_LOAD_PF \
        SYN_CLK_UNCERT_PCT SYN_IO_DELAY_PCT SYN_TOGGLE_RATE SYN_STATIC_PROB \
        SYN_CPUS SYN_PHYS
 
-.PHONY: all help check model modeltest err vec vecfsck vecfsck1 cfgof sim regress flowtest unit unitall lint syn synall power pdkcheck collect table manifest preflight clean
+.PHONY: all help check model modeltest err vec vecfsck vecfsck1 cfgof sim regress flowtest unit unitall lint syn synall pair pairall power pdkcheck collect table manifest preflight clean
 
 # 说明：这里刻意不用 shell 循环做变量间接引用——
 #       某些 Windows 环境下长命令行里的非 ASCII 会被截断，导致引号失配。
@@ -77,6 +83,8 @@ help:
 	@echo "  make regress VARIANT=<v> MODE=full    一个方案跑完六类（回归）"
 	@echo "  make lint    VARIANT=<v>             RTL 静态检查"
 	@echo "  make syn     VARIANT=<v> TAG=<t>     ASIC 综合（面积 / 时序）"
+	@echo "  make pair    VARIANT=<v> TAG=<t>     仿真+综合同一个 TAG，出完整的 A/D/E（表 2 用这个）"
+	@echo "  make pairall TAG=<t>                 三个方案各跑一遍 pair"
 	@echo "  make power   VARIANT=<v> TAG=<t>     看已跑综合的功耗（同一次综合，无独立功耗工具）"
 	@echo "  make synall  VARIANT=<v> TAG=<t>     tt/ss/ff 三个角各综合一遍"
 	@echo "  make pdkcheck                        打印工艺库/约束参数（综合前自检）"
@@ -210,6 +218,31 @@ synall:
 	  $(MAKE) --no-print-directory syn VARIANT=$(VARIANT) TAG=$(TAG)-$$c CORNER=$$c || exit 1; \
 	done
 
+# ---------------- 3.4 成对测量：仿真与综合落在同一个 TAG 下 ----------------
+# 为什么要有这条命令（2026-11 补，起因是 metrics.csv 的 delay/energy 长期为空）：
+#   表 2 的一个格子由两次测量拼成 —— 周期数来自仿真，面积与功耗来自综合。
+#   分两次跑、各给一个 TAG（历史做法：regress 用 TAG=varA，syn 用 TAG=varA-tt），
+#   两半就落进两个目录；collect 按 TAG 配对时找不到对方，D 与 E 只能空着。
+#   更糟的是当时 status 仍写 PASS，看上去像"测过了"。
+#   这条命令把两半固定写进 runs/<TAG>/，跑完立刻自校验配对是否齐。
+#
+# 用法：make pair VARIANT=varB TAG=varB-tt MODE=full [CORNER=tt]
+pair: check pdkcheck
+	@case "$(TAG)" in $(VARIANT)*) ;; \
+	  *) echo "⚠ TAG=$(TAG) 不以 $(VARIANT) 开头 —— 能跑，但表里容易与别的方案混";; esac
+	bash flow/sim/regress.sh $(VARIANT) $(TAG) $(SEED) $(MODE) $(CLOCK)
+	@$(MAKE) --no-print-directory manifest
+	bash flow/synth/run_syn.sh $(VARIANT) $(RUN) $(CLOCK) $(PVT)
+	@$(MAKE) --no-print-directory manifest
+	PYTHONIOENCODING=utf-8 $(PY) flow/collect/collect.py runs/ results/metrics.csv --expect $(TAG)
+
+# 三个方案各来一遍（报告表 2 用的那一套）。
+# TAG 里带工艺标签（ref-sm40-tt），这样 GPDK045 与 SMIC40 的同名角不会互相覆盖。
+pairall:
+	@for v in $(VARIANTS); do \
+	  $(MAKE) --no-print-directory pair VARIANT=$$v TAG=$$v-$(PDKTAG)-$(CORNER) MODE=$(MODE) || exit 1; \
+	done
+
 # ---------------- 3.5 布局布线（Innovus）----------------
 # tech LEF 不是 PDK 交付物，要从 ASCII techfile 生成（见 flow/pnr/gen_techlef.sh），
 # 生成物受 PDK 授权约束、不进库，所以路径可覆盖。
@@ -258,6 +291,12 @@ table:
 	@echo "-> $(TABLE_OUT)"
 
 # ---------------- 5. 可复现清单 ----------------
+# commit 的取法有三档，按顺序退：
+#   1) git rev-parse —— 在 NAS 工作区里跑当然有；
+#   2) hw/.commit —— **VM 上的情况**。VM 里那份是拷贝，没有 .git，
+#      以前这里直接写 NOT-A-REPO，于是表 2 的 commit 列整列作废，
+#      复现分那 10 分就成了一句空话。同步脚本写一行 sha 到这里即可；
+#   3) NOT-A-REPO —— 真的绑不上，下面会吼一声。
 manifest: check
 	@{ \
 	  echo "variant  : $(VARIANT)"; \
@@ -270,12 +309,14 @@ manifest: check
 	  echo "pdk      : $(PDK)"; \
 	  echo "sim      : $(SIM)"; \
 	  echo "syn      : $(SYN)"; \
-	  echo "commit   : $$(git rev-parse --short HEAD 2>/dev/null || echo 'NOT-A-REPO')"; \
+	  echo "commit   : $$(git rev-parse --short HEAD 2>/dev/null || cat .commit 2>/dev/null || echo 'NOT-A-REPO')"; \
 	  echo "dirty    : $$(git diff --name-only HEAD 2>/dev/null | wc -l) 个文件未提交"; \
 	  echo "host     : $$(hostname)"; \
 	  echo "time     : $$(date -Iseconds)"; \
 	} > $(RUN)/INFO.txt
 	@echo "-> $(RUN)/INFO.txt"
+	@test -n "$$(git rev-parse --short HEAD 2>/dev/null)" -o -f .commit || \
+	  echo "⚠ 没有 git、也没有 hw/.commit 戳 —— 这次结果绑不到 commit，表 2 的 commit 列会是 NOT-A-REPO"
 	@test "$$(git diff --name-only HEAD 2>/dev/null | wc -l)" -eq 0 || \
 	  echo "⚠ 工作区有未提交改动 —— 这次结果绑不到某个 commit，别急着写进报告"
 

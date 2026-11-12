@@ -42,14 +42,17 @@ module exp2_unit (
   logic        [16:0] a;
   logic        [16:0] b;
   logic signed [17:0] diff;
+  logic signed [63:0] mul_t;      // d*log2e 的乘积，单独一根线给常量 RNE 宏用
+  logic signed [63:0] mul_c;      // 插值修正项的乘积
   logic signed [63:0] corr;
   logic signed [63:0] e2s;
   logic signed [63:0] e64;
 
   always_comb begin
     // ---- 1. t = d * log2(e)，F=S_FRAC → F=16（RNE）----
+    mul_t = $signed({{32{d_fx[31]}}, d_fx}) * 64'sd94548;
     if (d_fx < 0)  t = 64'sd0;                      // 防御：契约保证 d>=0
-    else           t = attn_rne_shift($signed({{32{d_fx[31]}}, d_fx}) * 64'sd94548, 16);
+    else           t = `ATTN_RNE_SHR(mul_t, 16);
 
     n = int'(t >>> 16);
     f = t[15:0];
@@ -63,7 +66,8 @@ module exp2_unit (
     // b - a 一定是负的（表单调下降），必须按有符号算；
     // 注意 rem 是 unsigned，混进来会把乘积变成无符号，这里显式补 0 转 signed。
     diff = $signed({1'b0, b}) - $signed({1'b0, a});
-    corr = attn_rne_shift($signed(diff) * $signed({1'b0, rem}), FB);
+    mul_c = $signed(diff) * $signed({1'b0, rem});
+    corr  = `ATTN_RNE_SHR(mul_c, FB);       // FB = 16-EXP_LUT_BITS，恒 >= 1
     e2s  = $signed({47'd0, a}) + corr;
 
     // ---- 3. 乘 2^(-n)：n 大到位宽之外直接归零 ----

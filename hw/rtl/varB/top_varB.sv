@@ -53,13 +53,18 @@ module top_varB `ATTN_TOP_PORTS;
   localparam int SH_S = 2*Q_FRAC + 2 - S_FRAC;
   localparam int SH_P = RECIP_SH - P_FRAC;
   localparam int SH_Y = P_FRAC + Q_FRAC - Y_FRAC;
+  // 常量 RNE 宏要求 K >= 1；SH_S 在 QF=7 的配置下正好是 0（移位即恒等），
+  // 用 localparam 常量条件把那一支摘掉，死掉的一边不会进网表。
+  localparam int K_S     = (SH_S > 0) ? SH_S : 1;
+  localparam bit SH_S_ON = (SH_S > 0);
 
   // ---------------------------------------------------------------- 存储
   // 输入矩阵三份 + 输出一份，三个方案都一样，谁也省不掉。
   logic signed [QB-1:0] qm [0:NELEM-1];
   logic signed [QB-1:0] km [0:NELEM-1];
   logic signed [QB-1:0] vm [0:NELEM-1];
-  logic        [15:0]   om [0:NELEM-1];
+  // 输出不再缓存整块：P·V 的完成顺序天然是 (ci,cj) 字典序递增，
+  // 每个元素算完当拍直接送到 o_* 端口（tb 按流式采样，见 tb_attn.sv:247）。
 
   // 行局部：这就是行融合省下来的地方（varA 这里是 256 深的 sm / pu）
   logic signed [31:0] s_row  [0:N-1];       // 当前 A 级的 s，F=S_FRAC
@@ -71,7 +76,6 @@ module top_varB `ATTN_TOP_PORTS;
   // ⚠️ 状态名只是标签：varB 把 QK / softmax / P·V 熔进一条行流水，
   //    没有哪个单独的 state_t 能对应，这里统一用 S_QK 表示"行流水在跑"。
   state_t st;
-  logic [7:0] cout;
 
   // ---------------------------------------------------------------- A 级
   logic        a_busy;
@@ -149,7 +153,9 @@ module top_varB `ATTN_TOP_PORTS;
   assign qk_sum  = qk_p[0] + qk_p[1] + qk_p[2] + qk_p[3];
 
   logic signed [31:0] s_new;
-  assign s_new = attn_rne_shift(a_acc + qk_sum, SH_S);
+  logic signed [63:0] s_acc;        // S 的累加和，喂常量 RNE 宏
+  assign s_acc = a_acc + qk_sum;
+  assign s_new = SH_S_ON ? `ATTN_RNE_SHR(s_acc, K_S) : s_acc;
 
   // ---------------------------------------------------------------- C 级通路
   // P·V 的组调度（与 varA 同一套：按 4 个一组跳过整组为 0 的）
@@ -191,15 +197,19 @@ module top_varB `ATTN_TOP_PORTS;
   assign pv_sum  = pv_p[0] + pv_p[1] + pv_p[2] + pv_p[3];
 
   logic signed [63:0] pv_eff;
+  logic signed [63:0] pv_acc;
   assign pv_eff = pv_have ? pv_sum : 64'sd0;
-  assign y_fx   = attn_rne_shift(c_acc + pv_eff, SH_Y);
+  assign pv_acc = c_acc + pv_eff;
+  assign y_fx   = `ATTN_RNE_SHR(pv_acc, SH_Y);
 
   // ---- softmax 的组合通路 ----
   assign d_fx = a_maxv - s_row[a_j];
 
   logic signed [63:0] pr_c;
+  logic signed [63:0] pr_mul;
   logic        [16:0] p_sat;
-  assign pr_c = attn_rne_shift($signed({47'd0, erow[c_bank][c_j]}) * $signed({39'd0, c_rval}), SH_P);
+  assign pr_mul = $signed({47'd0, erow[c_bank][c_j]}) * $signed({39'd0, c_rval});
+  assign pr_c   = `ATTN_RNE_SHR(pr_mul, SH_P);
   always_comb begin
     if      (pr_c < 64'sd0)     p_sat = 17'd0;
     else if (pr_c > 64'sd65536) p_sat = 17'd65536;
@@ -222,7 +232,6 @@ module top_varB `ATTN_TOP_PORTS;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       st        <= S_IDLE;
-      cout      <= 8'd0;
       bank_busy <= 2'b00;
       a_busy    <= 1'b0; a_ph <= 1'b0; a_row <= 5'd0; a_j <= 4'd0; a_g <= 2'd0;
       a_bank    <= 2'd0; a_maxv <= 32'sd0; a_tsum <= 21'd0; a_acc <= 64'sd0;
@@ -237,6 +246,8 @@ module top_varB `ATTN_TOP_PORTS;
       o_vld     <= 1'b0; o_addr <= 8'd0; o_data <= 16'd0;
     end else begin
       done      <= 1'b0;
+      // o_vld 必须是单拍脉冲，流式输出下每拍都要先归零
+      o_vld     <= 1'b0;
       div_start <= 1'b0;
 
       // ================================================================
@@ -337,7 +348,9 @@ module top_varB `ATTN_TOP_PORTS;
             pv_done <= pv_g;
             pv_first <= 1'b0;
           end else begin
-            om[{c_row[3:0], c_j}] <= y_fp;
+            o_vld    <= 1'b1;
+            o_addr   <= {c_row[3:0], c_j};
+            o_data   <= y_fp;
             c_acc    <= 64'sd0;
             pv_first <= 1'b1;
             pv_done  <= 2'd0;
@@ -345,6 +358,9 @@ module top_varB `ATTN_TOP_PORTS;
               c_busy <= 1'b0;
               c_row  <= c_row + 5'd1;
               nfin   <= nfin + 5'd1;
+              // 最后一个元素在 c 级就送出了，done 必须与它同拍：tb 靠 done 记
+              // 时延，而且收到 256 个就退出循环，done 晚一拍就再也记不到。
+              if (c_row == N-1) done <= 1'b1;
               if (c_bank == 2'd0) bank_busy[0] <= 1'b0;
               else                bank_busy[1] <= 1'b0;
             end else begin
@@ -362,7 +378,6 @@ module top_varB `ATTN_TOP_PORTS;
           o_vld <= 1'b0;
           if (start) begin
             busy      <= 1'b1;
-            cout      <= 8'd0;
             bank_busy <= 2'b00;
             a_busy <= 1'b0; a_ph <= 1'b0; a_row <= 5'd0; a_j <= 4'd0; a_g <= 2'd0;
             a_acc  <= 64'sd0; a2b_v <= 1'b0;
@@ -373,19 +388,7 @@ module top_varB `ATTN_TOP_PORTS;
         end
 
         S_QK: begin
-          if (nfin == N) begin
-            cout <= 8'd0;
-            done <= 1'b1;
-            st   <= S_OUT;
-          end
-        end
-
-        S_OUT: begin
-          o_vld  <= 1'b1;
-          o_addr <= cout;
-          o_data <= om[cout];
-          if (cout == 8'd255) st <= S_DONE;
-          else                cout <= cout + 8'd1;
+          if (nfin == N) st <= S_DONE;
         end
 
         S_DONE: begin

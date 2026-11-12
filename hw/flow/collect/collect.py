@@ -2,7 +2,7 @@
 # =====================================================================
 #  flow/collect/collect.py —— 把 runs/ 下的原始结果汇总成一张表
 #
-#  用法： python3 flow/collect/collect.py runs/ results/metrics.csv
+#  用法： python3 flow/collect/collect.py runs/ results/metrics.csv [--expect TAG]
 #
 #  输入（都是别的步骤已经写好的机器可读文件，**不再重新解析日志**）：
 #    runs/<TAG>/syn/metrics.csv   综合：面积/时序/功耗（key,value）
@@ -17,6 +17,16 @@
 #    D 时延(µs) = 周期数 / 频率(MHz)
 #    E 能耗(nJ) = 功耗(mW) × 时延(µs)      ← mW×µs = nJ，量纲正好
 #    A₀/A、D₀/D、E₀/E：以 ref 为分母的相对改善
+#
+#  ── 配对（2026-11 补）───────────────────────────────────────────────
+#  表 2 的一个格子要同时有「周期数」和「面积/功耗」，两者分别由 sim 与 syn
+#  写在**同一个 TAG 目录**下。历史上有过 make regress TAG=varA 与
+#  make syn TAG=varA-tt 分两次跑的时期，结果落进两个目录，这里按 TAG
+#  找不到对方，delay/energy 就只能空着——而且当时 status 还是 PASS，
+#  看上去像"测过了"，这是最坏的一种空值。现在：
+#    status = PASS / FAIL / SIM-ONLY / SYN-ONLY，半行不再冒充整行；
+#    末尾打印每个方案的配对状态，缺配对时直接给出该敲的那条命令。
+#  --expect TAG：校验指定 TAG 是否已配对（make pair 用它做最后一道闸）。
 # =====================================================================
 import csv
 import os
@@ -104,10 +114,67 @@ def fnum(x):
         return None
 
 
+def info_clock(info):
+    """INFO.txt 里的 clock 写成 "100 MHz"，去掉单位再转数。"""
+    return fnum(str(info.get("clock", "")).replace("MHz", "").strip())
+
+
+def pairing_report(rows, expect):
+    """每个方案是否有「同一 TAG 下 sim + syn 都在」的行。
+
+    粒度刻意按方案而不是按 TAG：跨工艺角（-ff/-ss）本来就只该有 syn，
+    逐个 TAG 报会刷出十几行噪音，然后没人再看。真正会让人写不出表 2 的
+    是"整个方案没有一行配对"，那才是要报出来的事。
+    """
+    by_variant = {}
+    for r in rows:
+        by_variant.setdefault(r["variant"], []).append(r)
+
+    print("[collect] 配对状态（表 2 的 D 与 E 要求同一 TAG 下同时有 sim 与 syn）")
+    ok = {}
+    for v in sorted(by_variant):
+        rs = by_variant[v]
+        both = [r["tag"] for r in rs if r["_pair"] == "both"]
+        ok[v] = bool(both)
+        if both:
+            print("  %-5s ✓ 已配对：%s" % (v, ", ".join(both)))
+        else:
+            print("  %-5s ✗ 无配对行（%d 个 tag 都是半行：只有周期数或只有面积）"
+                  % (v, len(rs)))
+            print("        → make pair VARIANT=%s TAG=%s-tt MODE=full" % (v, v))
+
+    if expect:
+        hit = [r for r in rows if r["tag"] == expect]
+        if not hit:
+            print("✗ --expect %s：runs/ 里没有这个 tag" % expect)
+            return False
+        r = hit[0]
+        if r["_pair"] != "both":
+            miss = ("综合（面积与功耗）→ 只有 D，E 算不出来" if r["_pair"] == "sim"
+                    else "仿真（周期数）→ D 与 E 都算不出来")
+            print("✗ --expect %s：缺%s" % (expect, miss))
+            return False
+        if r.get("energy_nj") is None:
+            print("✗ --expect %s：面积/功耗/周期数没有凑齐，E 为空" % expect)
+            return False
+        print("✓ --expect %s：A/D/E 齐全（D=%s µs，E=%s nJ）"
+              % (expect, fmt(r["delay_us"]), fmt(r["energy_nj"])))
+    return True
+
+
 def main():
-    if len(sys.argv) < 3:
-        sys.exit("用法: collect.py <runs_dir> <out_csv>")
-    runs, out = sys.argv[1], sys.argv[2]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    expect = None
+    if "--expect" in sys.argv:
+        i = sys.argv.index("--expect")
+        if i + 1 >= len(sys.argv):
+            sys.exit("--expect 后面要跟 TAG")
+        expect = sys.argv[i + 1]
+        args = [a for a in args if a != expect]
+
+    if len(args) < 2:
+        sys.exit("用法: collect.py <runs_dir> <out_csv> [--expect TAG]")
+    runs, out = args[0], args[1]
 
     rows = []
     if os.path.isdir(runs):
@@ -119,11 +186,24 @@ def main():
             if not syn and not sim:
                 continue
 
-            clk = fnum(syn.get("clk_mhz"))
+            # 频率优先取综合里那份（它和约束同源），没有再退回 INFO.txt。
+            # 这样 SIM-ONLY 的行也能算出 D —— 周期数与频率都是已知量，
+            # 缺的只是"面积/功耗"，不该连时延一起丢掉。
+            clk = fnum(syn.get("clk_mhz")) or info_clock(info)
             pwr = fnum(syn.get("power_mw"))
             cyc = sim.get("cycles")
             delay = (cyc / clk) if (cyc and clk) else None
             energy = (pwr * delay) if (pwr is not None and delay) else None
+
+            if sim and syn:
+                pair = "both"
+                status = sim.get("status", "?")
+            elif sim:
+                pair = "sim"
+                status = "SIM-ONLY"
+            else:
+                pair = "syn"
+                status = "SYN-ONLY"
 
             rows.append({
                 "tag": tag,
@@ -146,8 +226,10 @@ def main():
                 "rmse": sim.get("rmse"),
                 "maxae": sim.get("maxae"),
                 "mism": sim.get("mism"),
-                "status": sim.get("status", "SYN-ONLY"),
+                "status": status,
+                "_pair": pair,
             })
+
 
     # ---- 相对改善：以 ref 那一行为分母 -------------------------------
     # 分母必须来自同一个工艺角、同一套约束。跨角比值没有意义，所以只在
@@ -178,6 +260,9 @@ def main():
         print("  %-14s %-5s A=%-9s D=%-8s E=%-8s RMSE=%-8s %s" % (
             r["tag"], r["variant"], fmt(r["area_um2"]), fmt(r["delay_us"]),
             fmt(r["energy_nj"]), fmt(r["rmse"]), r["status"]))
+
+    if not pairing_report(rows, expect):
+        sys.exit(1)
 
 
 def ratio(a, b):

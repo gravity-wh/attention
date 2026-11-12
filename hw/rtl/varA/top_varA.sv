@@ -55,6 +55,10 @@ module top_varA `ATTN_TOP_PORTS;
   localparam int SH_S = 2*Q_FRAC + 2 - S_FRAC;
   localparam int SH_P = RECIP_SH - P_FRAC;
   localparam int SH_Y = P_FRAC + Q_FRAC - Y_FRAC;
+  // 常量 RNE 宏要求 K >= 1；SH_S 在 QF=7 的配置下正好是 0（移位即恒等），
+  // 用 localparam 常量条件把那一支摘掉，死掉的一边不会进网表。
+  localparam int K_S     = (SH_S > 0) ? SH_S : 1;
+  localparam bit SH_S_ON = (SH_S > 0);
 
   // ---------------------------------------------------------------- 存储
   logic signed [QB-1:0] qm   [0:NELEM-1];   // 量化后的 Q / K / V
@@ -62,7 +66,8 @@ module top_varA `ATTN_TOP_PORTS;
   logic signed [QB-1:0] vm   [0:NELEM-1];
   logic signed [31:0]   sm   [0:NELEM-1];   // S，F=S_FRAC
   logic        [16:0]   pu   [0:NELEM-1];   // P，F=P_FRAC，[0, 65536]
-  logic        [15:0]   om   [0:NELEM-1];   // 输出 FP16
+  // 输出不再缓存整块：P·V 的完成顺序天然是 (ci,cj) 字典序递增，
+  // 每个元素算完当拍直接送到 o_* 端口（tb 按流式采样，见 tb_attn.sv:247）。
   logic [N-1:0]         nzrow [0:N-1];      // 每行 p 的非零掩码，供 P·V 跳组
   logic        [16:0]   erow [0:1][0:N-1];  // 双缓冲：A 级写 / C 级读
 
@@ -70,7 +75,6 @@ module top_varA `ATTN_TOP_PORTS;
   state_t  st;
   logic [3:0] ci, cj;
   logic [1:0] cg;                 // QK 的当前组
-  logic [7:0] cout;
   logic signed [63:0] acc;
 
   // P·V 的组游标：pv_first=1 表示当前 (ci,cj) 还没处理任何组
@@ -137,6 +141,7 @@ module top_varA `ATTN_TOP_PORTS;
   logic [7:0] qa_base, kb_base;
   logic signed [PW-1:0] qk_p [0:NL-1];
   logic signed [63:0]   qk_sum;
+  logic signed [63:0]   s_acc;      // S 的累加和，喂常量 RNE 宏
 
   assign qa_base = {ci, cg, 2'b00};
   assign kb_base = {cj, cg, 2'b00};
@@ -146,6 +151,7 @@ module top_varA `ATTN_TOP_PORTS;
   assign qk_p[2] = $signed(qm[qa_base + 8'd2]) * $signed(km[kb_base + 8'd2]);
   assign qk_p[3] = $signed(qm[qa_base + 8'd3]) * $signed(km[kb_base + 8'd3]);
   assign qk_sum  = qk_p[0] + qk_p[1] + qk_p[2] + qk_p[3];
+  assign s_acc   = acc + qk_sum;
 
   // ---- P·V 的组调度：找"下一个非零组"，跳过整组为 0 的 ----
   // 必须先于下面的 pv_p 声明：pv_g 是它们的取指下标。
@@ -190,15 +196,19 @@ module top_varA `ATTN_TOP_PORTS;
 
   // 组全零时 pv_sum 的组号被拉到 0，可能取到非零的 p，必须门控掉
   logic signed [63:0] pv_eff;
+  logic signed [63:0] pv_acc;
   assign pv_eff = pv_have ? pv_sum : 64'sd0;
-  assign y_fx   = attn_rne_shift(acc + pv_eff, SH_Y);
+  assign pv_acc = acc + pv_eff;
+  assign y_fx   = `ATTN_RNE_SHR(pv_acc, SH_Y);
 
   // ---- softmax ----
   assign d_fx = a_maxv - sm[{a_row[3:0], a_j}];
 
   logic signed [63:0] pr_c;
+  logic signed [63:0] pr_mul;
   logic        [16:0] p_sat;
-  assign pr_c = attn_rne_shift($signed({47'd0, erow[c_bank][c_j]}) * $signed({39'd0, c_rval}), SH_P);
+  assign pr_mul = $signed({47'd0, erow[c_bank][c_j]}) * $signed({39'd0, c_rval});
+  assign pr_c   = `ATTN_RNE_SHR(pr_mul, SH_P);
   always_comb begin
     if      (pr_c < 64'sd0)     p_sat = 17'd0;
     else if (pr_c > 64'sd65536) p_sat = 17'd65536;
@@ -221,7 +231,7 @@ module top_varA `ATTN_TOP_PORTS;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       st        <= S_IDLE;
-      ci        <= 4'd0;  cj     <= 4'd0;  cg    <= 2'd0;  cout <= 8'd0;
+      ci        <= 4'd0;  cj     <= 4'd0;  cg    <= 2'd0;
       acc       <= 64'sd0;
       pv_first  <= 1'b1;  pv_done <= 2'd0;
       bank_busy <= 2'b00;
@@ -237,6 +247,8 @@ module top_varA `ATTN_TOP_PORTS;
       o_vld     <= 1'b0;  o_addr <= 8'd0;  o_data <= 16'd0;
     end else begin
       done      <= 1'b0;
+      // o_vld 必须是单拍脉冲，流式输出下每拍都要先归零
+      o_vld     <= 1'b0;
       div_start <= 1'b0;
 
       // ================================================================
@@ -331,7 +343,7 @@ module top_varA `ATTN_TOP_PORTS;
           o_vld <= 1'b0;
           if (start) begin
             busy     <= 1'b1;
-            ci       <= 4'd0; cj <= 4'd0; cg <= 2'd0; cout <= 8'd0;
+            ci       <= 4'd0; cj <= 4'd0; cg <= 2'd0;
             acc      <= 64'sd0;
             pv_first <= 1'b1; pv_done <= 2'd0;
             bank_busy <= 2'b00;
@@ -346,7 +358,7 @@ module top_varA `ATTN_TOP_PORTS;
         // ------------------------------------------------ S = Q·Kᵀ
         S_QK: begin
           if (cg == NG-1) begin
-            sm[{ci, cj}] <= attn_rne_shift(acc + qk_sum, SH_S);
+            sm[{ci, cj}] <= SH_S_ON ? `ATTN_RNE_SHR(s_acc, K_S) : s_acc;
             acc <= 64'sd0;
             cg  <= 2'd0;
             if (cj == N-1) begin
@@ -383,7 +395,9 @@ module top_varA `ATTN_TOP_PORTS;
             pv_done <= pv_g;
             pv_first <= 1'b0;
           end else begin
-            om[{ci, cj}] <= y_fp;
+            o_vld    <= 1'b1;
+            o_addr   <= {ci, cj};
+            o_data   <= y_fp;
             acc      <= 64'sd0;
             pv_first <= 1'b1;
             pv_done  <= 2'd0;
@@ -391,9 +405,8 @@ module top_varA `ATTN_TOP_PORTS;
               cj <= 4'd0;
               if (ci == N-1) begin
                 ci   <= 4'd0;
-                cout <= 8'd0;
                 done <= 1'b1;
-                st   <= S_OUT;
+                st   <= S_DONE;
               end else begin
                 ci <= ci + 4'd1;
               end
@@ -401,15 +414,6 @@ module top_varA `ATTN_TOP_PORTS;
               cj <= cj + 4'd1;
             end
           end
-        end
-
-        // ------------------------------------------------ 结果回读
-        S_OUT: begin
-          o_vld  <= 1'b1;
-          o_addr <= cout;
-          o_data <= om[cout];
-          if (cout == 8'd255) st <= S_DONE;
-          else                cout <= cout + 8'd1;
         end
 
         S_DONE: begin

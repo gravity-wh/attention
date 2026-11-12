@@ -40,6 +40,7 @@ make help                      # 看方案清单与全部目标
 make flowtest                  # 自检流程本身（不需要 RTL，30 秒）
 make vec  SEED=20260101        # 黄金模型导出测试向量
 make regress VARIANT=ref MODE=smoke
+make pair VARIANT=ref TAG=ref-sm40-tt MODE=full   # 仿真+综合同一 TAG → A/D/E 齐全
 make collect                   # 汇总指标 → results/metrics.csv
 ```
 
