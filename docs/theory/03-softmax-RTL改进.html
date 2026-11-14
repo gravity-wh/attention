@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>softmax 的 RTL 设计改进 · 16×16 注意力模块</title>
+<style>
+  :root{
+    --ink:#1c1c1a; --muted:#6b6a64; --faint:#8f8e86;
+    --line:#e4e2db; --bg:#fcfcfa; --card:#ffffff; --sunk:#f6f5f1;
+    --blue:#185FA5; --blue-bg:#E6F1FB; --blue-ln:#B5D4F4;
+    --purple:#534AB7; --purple-bg:#EEEDFE; --purple-ln:#CECBF6;
+    --amber:#BA7517; --amber-bg:#FAEEDA; --amber-ln:#FAC775;
+    --red:#A32D2D; --red-bg:#FCEBEB; --red-ln:#F7C1C1;
+    --green:#0F6E56; --green-bg:#E1F5EE; --green-ln:#9FE1CB;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px; line-height:1.75; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:0 28px 120px}
+  /* ---------- hero ---------- */
+  .hero{padding:64px 0 40px; border-bottom:1px solid var(--line)}
+  .eyebrow{font-size:12px; letter-spacing:.08em; color:var(--faint); text-transform:uppercase; margin-bottom:14px}
+  h1{font-size:30px; line-height:1.35; font-weight:500; margin:0 0 16px; letter-spacing:-.01em}
+  .lead{font-size:16px; color:var(--muted); margin:0; max-width:720px}
+  .lead b{color:var(--ink); font-weight:500}
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:32px}
+  .metric{background:var(--card); border:.5px solid var(--line); border-radius:12px; padding:16px 18px}
+  .metric .k{font-size:12px; color:var(--faint); margin-bottom:6px}
+  .metric .v{font-size:26px; font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+  .metric .u{font-size:12px; color:var(--muted); margin-top:2px}
+  /* ---------- nav ---------- */
+  nav{position:sticky; top:0; z-index:10; background:rgba(252,252,250,.92); backdrop-filter:blur(8px);
+      border-bottom:1px solid var(--line); margin:0 -28px; padding:0 28px}
+  nav .inner{display:flex; gap:4px; overflow-x:auto; padding:10px 0; scrollbar-width:none}
+  nav .inner::-webkit-scrollbar{display:none}
+  nav a{flex:none; font-size:12.5px; color:var(--muted); text-decoration:none; padding:5px 10px; border-radius:6px; white-space:nowrap}
+  nav a:hover{background:var(--sunk); color:var(--ink)}
+  nav a.on{background:var(--blue-bg); color:var(--blue)}
+  /* ---------- sections ---------- */
+  section{padding:52px 0 8px; scroll-margin-top:56px}
+  .num{font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; letter-spacing:.06em; margin-bottom:8px}
+  h2{font-size:21px; font-weight:500; margin:0 0 18px; letter-spacing:-.01em}
+  h3{font-size:16px; font-weight:500; margin:32px 0 10px}
+  p{margin:0 0 16px}
+  p.note{font-size:13.5px; color:var(--muted)}
+  ul,ol{margin:0 0 16px; padding-left:22px}
+  li{margin-bottom:8px}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.8px;
+       background:var(--sunk); padding:1.5px 5px; border-radius:4px; color:#3a3a36}
+  pre{background:var(--sunk); border:.5px solid var(--line); border-radius:10px; padding:16px 18px;
+      overflow-x:auto; margin:0 0 18px; line-height:1.6}
+  pre code{background:none; padding:0; font-size:12.5px; color:#2e2e2a}
+  .cm{color:#8f8e86}
+  .kw{color:#534AB7}
+  .nm{color:#185FA5}
+  /* ---------- table ---------- */
+  table{width:100%; border-collapse:collapse; margin:0 0 20px; font-size:13.5px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:.5px solid var(--line); vertical-align:top}
+  th{font-weight:500; color:var(--muted); font-size:12.5px; background:var(--sunk)}
+  tr:last-child td{border-bottom:none}
+  td.n{font-variant-numeric:tabular-nums; white-space:nowrap}
+  .up{color:var(--green); font-weight:500}
+  .down{color:var(--red); font-weight:500}
+  /* ---------- figure ---------- */
+  figure{margin:8px 0 24px; background:var(--card); border:.5px solid var(--line); border-radius:12px; padding:18px 16px 10px}
+  figcaption{font-size:12.5px; color:var(--muted); padding:8px 4px 4px; line-height:1.6}
+  figure svg{display:block; width:100%; height:auto}
+  /* ---------- callout ---------- */
+  .call{border-left:2px solid var(--blue-ln); background:var(--blue-bg); padding:14px 18px; border-radius:0 8px 8px 0; margin:0 0 20px; font-size:14px}
+  .call.warn{border-color:var(--red-ln); background:var(--red-bg)}
+  .call.good{border-color:var(--green-ln); background:var(--green-bg)}
+  .call .t{font-weight:500; margin-bottom:4px; font-size:13.5px}
+  .call p:last-child{margin-bottom:0}
+  /* ---------- steps ---------- */
+  .steps{display:grid; gap:10px; margin:0 0 20px}
+  .step{display:grid; grid-template-columns:28px 1fr; gap:12px; align-items:start;
+        background:var(--card); border:.5px solid var(--line); border-radius:10px; padding:14px 16px}
+  .step .i{width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+           font-size:13px; font-weight:500; background:var(--blue-bg); color:var(--blue)}
+  .step .b{font-size:14px}
+  .step .b .h{font-weight:500; margin-bottom:2px}
+  .step .b .d{color:var(--muted); font-size:13px}
+  /* ---------- quiz ---------- */
+  details{background:var(--card); border:.5px solid var(--line); border-radius:10px; padding:14px 18px; margin-bottom:10px}
+  details[open]{border-color:var(--blue-ln)}
+  summary{cursor:pointer; font-size:14px; font-weight:500; list-style:none; display:flex; gap:10px; align-items:baseline}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"?"; flex:none; width:20px; height:20px; border-radius:50%; background:var(--purple-bg);
+                  color:var(--purple); font-size:12px; display:inline-flex; align-items:center; justify-content:center; font-weight:500}
+  details .a{margin-top:12px; padding-top:12px; border-top:.5px solid var(--line); font-size:14px; color:var(--muted)}
+  details .a b{color:var(--ink); font-weight:500}
+  .foot{margin-top:64px; padding-top:24px; border-top:1px solid var(--line); font-size:12.5px; color:var(--faint)}
+  @media (max-width:720px){
+    .wrap{padding:0 18px 80px}
+    h1{font-size:24px}
+    .metrics{grid-template-columns:1fr}
+    nav{margin:0 -18px; padding:0 18px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">数字集成电路设计 · Transformer 注意力模块 · 16×16</div>
+  <h1>softmax 的 RTL 改进：从「91 拍/行」到「不再是瓶颈」</h1>
+  <p class="lead">
+    一个 16×16 的 softmax，账面上只有 <b>256 次 exp、16 次除法、256 次归一化乘</b>，
+    却吃掉 ref 实现里 <b>69% 的乘法器面积</b> 和每行 <b>47% 的时间</b>——而那 47% 的时间完全在空转。
+    这页把它拆开：病根在哪、三种改法各自换到了什么、以及什么时候<b>应该停手</b>。
+  </p>
+  <div class="metrics">
+    <div class="metric">
+      <div class="k">ref 每行</div>
+      <div class="v">91 <span style="font-size:14px;font-weight:400;color:var(--muted)">拍</span></div>
+      <div class="u">16 行共 1 456 拍</div>
+    </div>
+    <div class="metric">
+      <div class="k">其中纯空转</div>
+      <div class="v">43 <span style="font-size:14px;font-weight:400;color:var(--muted)">拍</span></div>
+      <div class="u">只为一次 41 位除法</div>
+    </div>
+    <div class="metric">
+      <div class="k">行融合后 bank 占用</div>
+      <div class="v">203 <span style="font-size:14px;font-weight:400;color:var(--muted)">→ 139</span></div>
+      <div class="u">四行代码换 −18% 延迟</div>
+    </div>
+  </div>
+</header>
+
+<nav><div class="inner">
+  <a href="#s1">一、账本</a>
+  <a href="#s2">二、病根</a>
+  <a href="#s3">三、流水化</a>
+  <a href="#s4">四、行融合与 bank</a>
+  <a href="#s5">五、除法器要不要并行</a>
+  <a href="#s6">六、exp2 切流水</a>
+  <a href="#s7">七、三条红线</a>
+  <a href="#s8">八、自测</a>
+</div></nav>
+
+<!-- ============================================================ 1 -->
+<section id="s1">
+  <div class="num">01</div>
+  <h2>先把账本摊开</h2>
+  <p>
+    softmax 按行执行，16 行彼此独立。所以整个优化问题只有两个变量：
+    <b>每行要多少拍</b>，和 <b>一行占住多少硬件</b>。ref 的选择是把两者都压到最小：
+    每拍只做一件事，一行一行的来。
+  </p>
+
+  <table>
+    <thead><tr><th>相位</th><th>拍数</th><th>每拍做什么</th><th>占用的资源</th></tr></thead>
+    <tbody>
+      <tr><td><code>SM_MX</code></td><td class="n">16</td><td>读 S[i][j]，与 maxv 比大小</td><td>sm 读口 + 32b 比较器</td></tr>
+      <tr><td><code>SM_EX</code></td><td class="n">16</td><td><code>d = maxv − S</code> → <code>2^−d</code> → 写 erow、累加 tsum</td><td>sm 读口 + 减法器 + EXP2</td></tr>
+      <tr><td><code>SM_DV</code></td><td class="n">43</td><td>等 <code>R = 2^40 / T</code> 长除出来</td><td>仅除法器</td></tr>
+      <tr><td><code>SM_NM</code></td><td class="n">16</td><td><code>p = e·R ≫ 24</code>，饱和到 [0, 65536]</td><td>erow 读口 + 17×25 乘法器</td></tr>
+      <tr><td colspan="2" class="n"><b>合计</b></td><td colspan="2">16 + 16 + 43 + 16 = <b>91</b> 拍/行，× 16 行 = <b>1 456</b> 拍</td></tr>
+    </tbody>
+  </table>
+
+  <p class="note">
+    这个 91 不是估的：ref 的实测总周期 9 665 = QK 4 096 + softmax 1 456 + P·V 4 096 + 17 拍开销，
+    反推每行正好 91，与 <code>recip_unit</code> 的 41 + 2 拍长除对得上。
+  </p>
+</section>
+
+<!-- ============================================================ 2 -->
+<section id="s2">
+  <div class="num">02</div>
+  <h2>病根：43 拍里，三个资源全在晒太阳</h2>
+  <p>
+    把四个相位的资源占用画成泳道图，问题一眼就看出来了——<b>任何时刻只有一个资源在干活</b>。
+    四个资源本可以并排工作，却被一条串行的状态机排成了队列。
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 680 250" role="img" aria-label="ref 的 softmax 资源占用泳道图">
+      <g font-family="system-ui,sans-serif">
+        <text x="40" y="20" font-size="12.5" font-weight="500" fill="#2C2C2A">ref：一行 91 拍内的资源占用</text>
+
+        <text x="128" y="47" font-size="12" fill="#5F5E5A" text-anchor="end">sm 读口</text>
+        <rect x="140" y="36" width="175.8" height="20" fill="#B5D4F4"/>
+        <rect x="315.8" y="36" width="324.2" height="20" fill="#F1EFE8"/>
+
+        <text x="128" y="77" font-size="12" fill="#5F5E5A" text-anchor="end">EXP2 单元</text>
+        <rect x="140" y="66" width="87.9" height="20" fill="#F1EFE8"/>
+        <rect x="227.9" y="66" width="87.9" height="20" fill="#AFA9EC"/>
+        <rect x="315.8" y="66" width="324.2" height="20" fill="#F1EFE8"/>
+
+        <text x="128" y="107" font-size="12" fill="#5F5E5A" text-anchor="end">41 位除法器</text>
+        <rect x="140" y="96" width="175.8" height="20" fill="#F1EFE8"/>
+        <rect x="315.8" y="96" width="236.3" height="20" fill="#FAC775"/>
+        <rect x="552.1" y="96" width="87.9" height="20" fill="#F1EFE8"/>
+
+        <text x="128" y="137" font-size="12" fill="#5F5E5A" text-anchor="end">归一化乘 + 饱和</text>
+        <rect x="140" y="126" width="412.1" height="20" fill="#F1EFE8"/>
+        <rect x="552.1" y="126" width="87.9" height="20" fill="#9FE1CB"/>
+
+        <g font-size="11" fill="#8f8e86">
+          <text x="140" y="163">0</text>
+          <text x="227.9" y="163" text-anchor="middle">16</text>
+          <text x="315.8" y="163" text-anchor="middle">32</text>
+          <text x="552.1" y="163" text-anchor="middle">75</text>
+          <text x="640" y="163" text-anchor="end">91</text>
+        </g>
+        <line x1="140" y1="155" x2="640" y2="155" stroke="#D3D1C7" stroke-width=".5"/>
+
+        <line x1="315.8" y1="103" x2="552.1" y2="103" stroke="#A32D2D" stroke-width="1"/>
+        <line x1="315.8" y1="100" x2="315.8" y2="106" stroke="#A32D2D" stroke-width="1"/>
+        <line x1="552.1" y1="100" x2="552.1" y2="106" stroke="#A32D2D" stroke-width="1"/>
+        <text x="434" y="180" font-size="12" font-weight="500" fill="#A32D2D" text-anchor="middle">43 拍 = 47% 的时间，只为一次除法</text>
+
+        <line x1="40" y1="196" x2="640" y2="196" stroke="#D3D1C7" stroke-width=".5"/>
+        <text x="40" y="216" font-size="12" fill="#5F5E5A">灰色 = 该资源本拍闲置。四个资源没有任何一拍是同时在工作的。</text>
+        <text x="40" y="234" font-size="12" fill="#5F5E5A">改法的全部思路就是：让「等除法」的那 43 拍，被下一行的 max+exp 填满。</text>
+      </g>
+    </svg>
+    <figcaption>ref 的资源占用泳道。SM_DV 阶段 43 拍里，sm 读口、EXP2、归一化乘法器全部闲置。</figcaption>
+  </figure>
+
+  <div class="call warn">
+    <div class="t">为什么不能直接把 43 拍砍掉</div>
+    <p>
+      除法的 41 拍不是写坏了，是恢复余数法的固有节拍：被除数 <code>2^40</code> 只有 bit40 是 1，
+      必须逐位移进去才能得到 41 位商。想快只有三条路——并行多个除法器（面积翻倍）、
+      改用 Newton 迭代（要一个初始倒数表 + 2 次乘法，但舍入点变了、逐位一致就没了）、
+      或者<b>让这 43 拍干别的事</b>。第三条不要钱，前两条都要。
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section id="s3">
+  <div class="num">03</div>
+  <h2>改进一：三级流水，把 43 拍的空档填掉</h2>
+  <p>
+    这是 varA 的做法，也是投入产出比最高的一步：不并行、不近似、不改任何运算，
+    只把一行的四个相位拆成三级，让三行同时在飞。
+  </p>
+
+  <div class="steps">
+    <div class="step"><div class="i">A</div><div class="b">
+      <div class="h">取 max + exp（32 拍）</div>
+      <div class="d">写 <code>erow[bank]</code>，同时算出 <code>tsum</code> 交给 B 级</div>
+    </div></div>
+    <div class="step"><div class="i">B</div><div class="b">
+      <div class="h">倒数（43 拍）</div>
+      <div class="d">独占除法器。这 43 拍里 A 级正好把下一行算完（32 &lt; 43，藏得下）</div>
+    </div></div>
+    <div class="step"><div class="i">C</div><div class="b">
+      <div class="h">归一化（16 拍）</div>
+      <div class="d">读 <code>erow[bank]</code> 与 <code>rval</code> 相乘，写 <code>pu</code>，顺手记非零掩码</div>
+    </div></div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 680 250" role="img" aria-label="varA 的三级流水时序">
+      <g font-family="system-ui,sans-serif">
+        <text x="40" y="20" font-size="12.5" font-weight="500" fill="#2C2C2A">varA：三级流水，四行同时在飞（稳态 ≈ 45 拍/行）</text>
+        <g font-size="11.5">
+          <rect x="300" y="30" width="9" height="9" rx="2" fill="#378ADD"/><text x="314" y="38" fill="#5F5E5A">A 级</text>
+          <rect x="360" y="30" width="9" height="9" rx="2" fill="#7F77DD"/><text x="374" y="38" fill="#5F5E5A">B 级</text>
+          <rect x="420" y="30" width="9" height="9" rx="2" fill="#1D9E75"/><text x="434" y="38" fill="#5F5E5A">C 级</text>
+        </g>
+
+        <text x="52" y="60" font-size="11.5" fill="#5F5E5A" text-anchor="end">行 0</text>
+        <rect x="60" y="49" width="78.4" height="18" fill="#378ADD"/>
+        <rect x="140.9" y="49" width="105.4" height="18" fill="#7F77DD"/>
+        <rect x="248.7" y="49" width="39.2" height="18" fill="#1D9E75"/>
+
+        <text x="52" y="94" font-size="11.5" fill="#5F5E5A" text-anchor="end">行 1</text>
+        <rect x="138.4" y="83" width="78.4" height="18" fill="#378ADD"/>
+        <rect x="248.7" y="83" width="105.4" height="18" fill="#7F77DD"/>
+        <rect x="356.5" y="83" width="39.2" height="18" fill="#1D9E75"/>
+
+        <text x="52" y="128" font-size="11.5" fill="#5F5E5A" text-anchor="end">行 2</text>
+        <rect x="287.9" y="117" width="78.4" height="18" fill="#378ADD"/>
+        <rect x="356.5" y="117" width="105.4" height="18" fill="#7F77DD"/>
+        <rect x="464.3" y="117" width="39.2" height="18" fill="#1D9E75"/>
+
+        <text x="52" y="162" font-size="11.5" fill="#5F5E5A" text-anchor="end">行 3</text>
+        <rect x="395.7" y="151" width="78.4" height="18" fill="#378ADD"/>
+        <rect x="464.3" y="151" width="105.4" height="18" fill="#7F77DD"/>
+        <rect x="572.1" y="151" width="39.2" height="18" fill="#1D9E75"/>
+
+        <rect x="216.8" y="117" width="71.1" height="18" fill="#FCEBEB"/>
+        <text x="252" y="130" font-size="10" fill="#A32D2D" text-anchor="middle">等 bank</text>
+
+        <line x1="60" y1="176" x2="620" y2="176" stroke="#D3D1C7" stroke-width=".5"/>
+        <text x="40" y="196" font-size="12" fill="#5F5E5A">3 个资源同时在飞，稳态吞吐 = max(A 32, B 43, C 16, bank 91÷2) ≈ 45 拍/行</text>
+        <text x="40" y="214" font-size="12" fill="#A32D2D">代价：erow 要 2 bank 双缓冲（A 写 / C 读），+272 个触发器</text>
+        <text x="40" y="232" font-size="12" fill="#5F5E5A">注意行内顺序一步没动 —— 仍然是 max → exp → 倒数 → 归一，这是逐位一致的前提</text>
+      </g>
+    </svg>
+    <figcaption>三级流水的稳态时序。行 1 的 A 级结束后要等 bank 释放才能启动行 2（粉色空档）。</figcaption>
+  </figure>
+
+  <h3>为什么这样就逐位一致</h3>
+  <p>
+    因为<b>行与行之间没有数据依赖</b>——softmax 是按行定义的，第 i 行的 max、tsum、倒数只用到第 i 行自己。
+    流水线只是把「不同行」重叠起来，同一行内部的四步顺序一个字都没改，连舍入点都没挪。
+    所以这不是"数学上等价"，是<b>逐位相同</b>。
+  </p>
+
+  <div class="call">
+    <div class="t">反过来，这套东西不能用</div>
+    <p>
+      <b>在线 softmax</b>（flash attention 那套 running max / sum 重标定）：它把 max 的更新与 exp 的累加交错进行，
+      每步都要对已累加的部分和重新缩放。那个重标定引入了新的舍入点，结果与「先取整行 max 再 exp」<b>不逐位相等</b>。
+      判据是"与自身软件模型逐位一致"，这条路直接判死。
+    </p>
+  </div>
+
+  <p>
+    收益：91 → 45.5 拍/行，softmax 从 1 456 拍降到 728 拍。<b>面积上只多了 272 个触发器</b>（erow 双缓冲）。
+    这是全项目里"零数值风险"的最高性价比改动。
+  </p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section id="s4">
+  <div class="num">04</div>
+  <h2>改进二：行融合，以及一个被漏算的瓶颈</h2>
+  <p>
+    varB 更进一步：既然 softmax 是按行的，那就<b>一行走完 QK → softmax → P·V 再换下一行</b>。
+    于是 <code>sm[256]</code>（32 bit）和 <code>pu[256]</code>（17 bit）整个消失，
+    只剩 16 深的 <code>s_row</code> / <code>pu_row</code>。省下 11 744 个触发器 + 45 914 µm² 的读 mux。
+  </p>
+
+  <p>
+    但这里有个东西值得单独说，因为<b>它是用实测反推出来的，不是估的</b>。
+  </p>
+
+  <h3>注释说 80 拍/行，实测 1 738 拍</h3>
+  <p>
+    varB 的文件头按 <code>max(A 80, B 43, C 80) = 80 拍/行</code> 估 1 400 拍，实测 1 738。
+    差的 339 拍不是估错，是 <code>erow</code> 的 <b>bank 占用时间</b>没算进去——
+    逐拍核算后正确的账是 <b>82 + 8×81 + 8×126 = 1 738</b>（前导 82、8 个奇数行 81、8 个偶数行被 bank 拖成 126），
+    bank 等待合计 <b>360 拍 = 8 行 × 45</b>——
+    <code>bank_busy</code> 是在 C 级的 <b>P·V 走完最后一列</b>才清的，而 C 的 P·V 段只用
+    <code>pu_row</code> 和 <code>nzrow_r</code>，<b>根本不需要 erow</b>。
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 680 210" role="img" aria-label="varB 的 erow bank 占用对比">
+      <g font-family="system-ui,sans-serif">
+        <text x="40" y="20" font-size="12.5" font-weight="500" fill="#2C2C2A">varB：一行占住一个 erow bank 多久</text>
+
+        <text x="40" y="56" font-size="13" font-weight="500" fill="#2C2C2A">现状</text>
+        <rect x="140" y="40" width="192.9" height="26" fill="#378ADD"/>
+        <rect x="332.9" y="40" width="107.1" height="26" fill="#7F77DD"/>
+        <rect x="440" y="40" width="190.5" height="26" fill="#EF9F27"/>
+        <text x="236" y="57" font-size="12" fill="#FFFFFF" text-anchor="middle">A 级 81</text>
+        <text x="386" y="57" font-size="12" fill="#FFFFFF" text-anchor="middle">B 45</text>
+        <text x="535" y="57" font-size="12" fill="#FFFFFF" text-anchor="middle">C 级 80</text>
+        <path d="M634 36 L639 27 L629 27 Z" fill="#A32D2D"/>
+        <text x="620" y="34" font-size="11" fill="#A32D2D" text-anchor="end">释放</text>
+        <text x="140" y="86" font-size="12" fill="#5F5E5A">206 拍 / 行 ÷ 2 bank = 103 拍/行，但实测是 <tspan font-weight="500" fill="#A32D2D">81 / 126 交替</tspan></text>
+        <text x="140" y="104" font-size="12" fill="#A32D2D">82 + 8×81 + 8×126 = 1 738，bank 等待合计 360 拍</text>
+
+        <text x="40" y="146" font-size="13" font-weight="500" fill="#2C2C2A">改后</text>
+        <rect x="140" y="130" width="192.9" height="26" fill="#378ADD"/>
+        <rect x="332.9" y="130" width="107.1" height="26" fill="#7F77DD"/>
+        <rect x="440" y="130" width="38.1" height="26" rx="2" fill="#EF9F27"/>
+        <text x="236" y="147" font-size="12" fill="#FFFFFF" text-anchor="middle">A 级 81</text>
+        <text x="386" y="147" font-size="12" fill="#FFFFFF" text-anchor="middle">B 45</text>
+        <path d="M482 126 L487 117 L477 117 Z" fill="#0F6E56"/>
+        <text x="493" y="124" font-size="11" fill="#0F6E56">释放（归一 16）</text>
+        <text x="140" y="176" font-size="12" fill="#5F5E5A">142 ÷ 2 = <tspan font-weight="500" fill="#0F6E56">71 &lt; 81</tspan> → 瓶颈回到 A 级 = 81 拍/行 → <tspan font-weight="500">1 423 拍</tspan></text>
+
+        <line x1="40" y1="188" x2="640" y2="188" stroke="#D3D1C7" stroke-width=".5"/>
+        <text x="40" y="204" font-size="11.5" fill="#5F5E5A">差的那 64 拍 = C 级的 P·V 段，它只用 pu_row / nzrow_r，不碰 erow</text>
+      </g>
+    </svg>
+    <figcaption>把 bank 释放从「P·V 结束」提前到「归一化结束」，占用从 206 降到 142，两个 bank 终于喂得饱 A 级（逐拍模型：1 738 → 1 423）。</figcaption>
+  </figure>
+
+  <p>改动本身只有四行——把释放挪出 P·V 分支：</p>
+
+<pre><code><span class="cm">// top_varB.sv  C 级归一化，c_ph == 0 的 c_j == N-1 那一拍</span>
+<span class="kw">if</span> (c_j == N-1) <span class="kw">begin</span>
+  c_ph  &lt;= 1'b1;
+  c_j   &lt;= 4'd0;
+  c_acc &lt;= 64'sd0;
+<span class="cm">  // ↓ 新增：归一化读完 erow，此刻就该还 bank</span>
+  <span class="kw">if</span> (c_bank == 2'd0) bank_busy[0] &lt;= 1'b0;
+  <span class="kw">else</span>                bank_busy[1] &lt;= 1'b0;
+<span class="kw">end</span>
+</code></pre>
+
+  <div class="call good">
+    <div class="t">一个反直觉的副作用（好事）</div>
+    <p>
+      改完之后 A 级（81 拍/行）比 B 级（45 拍/行）慢，<code>a2b_v</code> 那个单寄存器永远不会被追上，
+      "A 级连产两行覆盖上一行 tsum" 的隐患自动消失。
+      <b>现在这个隐患不发作，纯粹是因为 2 个 bank 恰好把 A 卡住了</b>——
+      一个靠参数巧合成立的隐式反压。所以不管改不改，都建议补一条 <code>a2b</code> 的 SVA。
+    </p>
+  </div>
+
+  <p>
+    收益：<b>1 738 → 1 423 拍（−18.1%）</b>，零面积成本；对 ref 的加速比由 5.56× 提到 6.79×。
+  </p>
+</section>
+
+<!-- ============================================================ 5 -->
+<section id="s5">
+  <div class="num">05</div>
+  <h2>改进三：除法器要不要并行？先算笔账</h2>
+  <p>
+    流水的极限是 B 级的 43 拍——除法器只有一个，它决定了 softmax 的吞吐下限。
+    很自然的下一个念头是：再放一个除法器，两行交错，B 级吞吐变 21.5 拍/行。
+  </p>
+
+  <table>
+    <thead><tr><th>方案</th><th>softmax 吞吐</th><th>新增面积</th><th>实际收益</th></tr></thead>
+    <tbody>
+      <tr><td>1 个除法器 + 流水（varA）</td><td class="n">45.5 拍/行</td><td class="n">+272 FF</td><td>基准</td></tr>
+      <tr><td>2 个除法器交错</td><td class="n">~22 拍/行</td><td class="n">+1 个 recip_unit<br>（≈ 90 FF + 46 bit 逻辑）</td><td class="down">≈ 0</td></tr>
+      <tr><td>4 路并行 exp</td><td class="n">32 → 20 拍/行</td><td class="n">+3 个 EXP2（面积 ×4）</td><td class="down">≈ 0</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    看着矛盾，其实不矛盾：<b>B 级不再是瓶颈之后，瓶颈就转移了</b>。
+    在 varB 里 A 级是 80 拍/行（64 拍 QK + 16 拍 exp），C 级也是 80 拍/行（16 拍归一 + 64 拍 P·V）。
+    softmax 真正占的只有 <b>32 拍</b>，其余 128 拍全是 4-lane MAC 在做 Q·Kᵀ 和 P·V。
+    此时把除法器翻倍，等于给一条已经不被堵的路再加一条车道。
+  </p>
+
+  <div class="call warn">
+    <div class="t">一个容易犯的错</div>
+    <p>
+      "softmax 占了 69% 的乘法器面积，所以应该优化 softmax"——这个推理在 varB 里是错的。
+      它成立的前提是 softmax 同时在关键路径上。flow 融合之后它已经退到后台，
+      <b>下一个瓶颈是 QK/P·V 的 4 lane</b>。改错地方，周期数一点不动。
+    </p>
+  </div>
+
+  <p>
+    什么时候 2 个除法器才划算？当 A 级被压到 43 拍以下的时候——也就是 lane 数已经拉到 8 以后。
+    以现在 4 lane 的编排，这个改动<b>净收益为零</b>，不要做。
+  </p>
+</section>
+
+<!-- ============================================================ 6 -->
+<section id="s6">
+  <div class="num">06</div>
+  <h2>改进四：exp2 里切一刀，换频率不换周期</h2>
+  <p>
+    前面三条改的都是"拍数"，这条改的是"每拍能跑多快"。
+    ref 的关键路径 9.4 ns 主体就是 <code>exp2_unit</code>——五步全塞在一拍里：
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 680 230" role="img" aria-label="exp2_unit 的五步与切流水方案">
+      <g font-family="system-ui,sans-serif">
+        <text x="40" y="20" font-size="12.5" font-weight="500" fill="#2C2C2A">现状：五步一条组合链，9.4 ns 打满一个周期</text>
+
+        <rect x="40" y="34" width="100" height="46" rx="6" fill="#E6F1FB" stroke="#B5D4F4" stroke-width=".5"/>
+        <text x="90" y="52" font-size="11.5" fill="#0C447C" text-anchor="middle">① ×log2e</text>
+        <text x="90" y="68" font-size="11" fill="#5F5E5A" text-anchor="middle">32×17</text>
+
+        <rect x="155" y="34" width="100" height="46" rx="6" fill="#E6F1FB" stroke="#B5D4F4" stroke-width=".5"/>
+        <text x="205" y="52" font-size="11.5" fill="#0C447C" text-anchor="middle">② RNE≫16</text>
+        <text x="205" y="68" font-size="11" fill="#5F5E5A" text-anchor="middle">拆 n / f</text>
+
+        <rect x="270" y="34" width="100" height="46" rx="6" fill="#E6F1FB" stroke="#B5D4F4" stroke-width=".5"/>
+        <text x="320" y="52" font-size="11.5" fill="#0C447C" text-anchor="middle">③ LUT a,b</text>
+        <text x="320" y="68" font-size="11" fill="#5F5E5A" text-anchor="middle">17×17 ×2 读口</text>
+
+        <rect x="385" y="34" width="100" height="46" rx="6" fill="#E6F1FB" stroke="#B5D4F4" stroke-width=".5"/>
+        <text x="435" y="52" font-size="11.5" fill="#0C447C" text-anchor="middle">④ 插值</text>
+        <text x="435" y="68" font-size="11" fill="#5F5E5A" text-anchor="middle">18×13 + 加法</text>
+
+        <rect x="500" y="34" width="100" height="46" rx="6" fill="#E6F1FB" stroke="#B5D4F4" stroke-width=".5"/>
+        <text x="550" y="52" font-size="11.5" fill="#0C447C" text-anchor="middle">⑤ ≫n</text>
+        <text x="550" y="68" font-size="11" fill="#5F5E5A" text-anchor="middle">17 位桶形</text>
+
+        <g stroke="#8f8e86" stroke-width="1" fill="none">
+          <path d="M140 57 L155 57"/><path d="M255 57 L270 57"/><path d="M370 57 L385 57"/><path d="M485 57 L500 57"/>
+        </g>
+        <path d="M40 88 L600 88" stroke="#A32D2D" stroke-width="1"/>
+        <text x="320" y="104" font-size="11.5" fill="#A32D2D" text-anchor="middle">同一条路径 → floor slack = 0，Fmax 只有 106 MHz</text>
+
+        <text x="40" y="140" font-size="12.5" font-weight="500" fill="#2C2C2A">切一刀：①② | ③④⑤，中间插一个寄存器</text>
+
+        <rect x="40" y="154" width="252" height="46" rx="6" fill="#EEEDFE" stroke="#CECBF6" stroke-width=".5"/>
+        <text x="166" y="172" font-size="11.5" fill="#534AB7" text-anchor="middle">① 常数乘 + 拆 n/f</text>
+        <text x="166" y="188" font-size="11" fill="#5F5E5A" text-anchor="middle">乘法树 + 比较器（最长的一段）</text>
+
+        <rect x="336" y="154" width="264" height="46" rx="6" fill="#E1F5EE" stroke="#9FE1CB" stroke-width=".5"/>
+        <text x="468" y="172" font-size="11.5" fill="#0F6E56" text-anchor="middle">③ LUT + 插值 + 移位</text>
+        <text x="468" y="188" font-size="11" fill="#5F5E5A" text-anchor="middle">查表 + 小乘法 + 桶形移位</text>
+
+        <rect x="306" y="166" width="16" height="22" rx="2" fill="#FFFFFF" stroke="#8f8e86" stroke-width=".5"/>
+        <text x="314" y="181" font-size="9" fill="#5F5E5A" text-anchor="middle">FF</text>
+
+        <text x="40" y="220" font-size="12" fill="#5F5E5A">吞吐不变（仍然 1 元素/拍），只多 1 拍延迟；Fmax 预期 +15%</text>
+      </g>
+    </svg>
+    <figcaption>exp2_unit 内部五步。在「拆分整数/小数」之后插一级寄存器，是最自然的切点：前半是乘法树，后半是查表和小乘法。</figcaption>
+  </figure>
+
+  <p>
+    为什么这条对 <b>varA/varB 几乎零成本</b>：它们的 A 级本来就是流水结构，exp 一拍一个元素，
+    加一级流水只改延迟不改吞吐，稳态周期数不变（bank 占用 +1 拍，可忽略）。
+    对 <b>ref</b> 则是实打实的 +1 拍/元素（因为它不是流水），一行 +16 拍——所以这条别在 ref 上做。
+  </p>
+</section>
+
+<!-- ============================================================ 7 -->
+<section id="s7">
+  <div class="num">07</div>
+  <h2>三条不能碰的红线</h2>
+  <p>
+    上面所有改法共用同一个前提：<b>与自身软件模型逐位一致</b>。这个判据把优化空间切成了两半。
+  </p>
+
+  <table>
+    <thead><tr><th>不能做</th><th>为什么</th><th>替代</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>在线 softmax</b><br>running max/sum 重标定</td>
+        <td>重标定引入新的舍入点，结果与「先取整行 max 再 exp」不逐位相等</td>
+        <td>行级流水（不改行内顺序）</td>
+      </tr>
+      <tr>
+        <td><b>改行内顺序</b><br>比如先 exp 后取 max</td>
+        <td>d = max − S 依赖 max，顺序本身就是数值定义</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><b>MAC 近似</b><br>BESA 那类近位宽乘法器</td>
+        <td>近似只允许出现在模型已经规定近似的地方（exp / 倒数 / 量化）</td>
+        <td>精确 16×16，靠 lane 数换吞吐</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="note">
+    换句话说：<b>能改的只有调度（谁和谁重叠、什么顺序发车），不能改的是算式</b>。
+    这不是保守——判据是"逐位一致"，一旦某个乘法器开始截断，比较就变成了"大概对"，这个项目的核心论证就没了。
+  </p>
+</section>
+
+<!-- ============================================================ 8 -->
+<section id="s8">
+  <div class="num">08</div>
+  <h2>收益汇总，以及什么时候该停手</h2>
+
+  <table>
+    <thead><tr><th>#</th><th>改动</th><th>收益</th><th>成本</th><th>优先级</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>三级流水（A/B/C）</td><td class="n up">91 → 45.5 拍/行</td><td>+272 FF</td><td>已做（varA）</td></tr>
+      <tr><td class="n">2</td><td>行融合（删 sm/pu）</td><td class="n up">−11 744 FF，−45 914 µm² mux</td><td>0</td><td>已做（varB）</td></tr>
+      <tr><td class="n">3</td><td>bank 释放提前</td><td class="n up">1 738 → 1 423 拍（−18.1%）</td><td>4 行代码</td><td><b>立刻做</b></td></tr>
+      <tr><td class="n">4</td><td>exp2 切一级流水</td><td class="n up">Fmax +15%</td><td>1 个寄存器 + 重跑</td><td>要做（只 varA/B）</td></tr>
+      <tr><td class="n">5</td><td>2 个除法器交错</td><td class="n down">≈ 0</td><td>+1 recip_unit</td><td>不做</td></tr>
+      <tr><td class="n">6</td><td>4 路并行 exp</td><td class="n down">≈ 0</td><td>EXP2 面积 ×4</td><td>不做</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    表格最后两行其实在讲同一件事：<b>softmax 的优化在 varB 里已经做完了</b>。
+    它一度是 47% 的空转，现在被压成 32 拍、藏在 80 拍的 MAC 后面。
+    继续抠它的除法器或 exp，周期数一点不动——下一个瓶颈是 4 lane 的 QK/P·V。
+  </p>
+
+  <div class="call">
+    <div class="t">一句话总结</div>
+    <p>
+      softmax 的 RTL 改进不是"把 exp 算得更快"，而是<b>把等除法的 43 拍让给下一行的 max+exp</b>。
+      三步走完：流水化吃掉空转（91→45.5）→ 行融合删掉缓冲（−12.5k FF）→ 把 bank 还给 A 级（−18%）。
+      再往下就不是 softmax 的事了。
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ quiz -->
+<section id="s9">
+  <div class="num">09</div>
+  <h2>三道自测</h2>
+  <p class="note">先自己想，再展开对答案。</p>
+
+  <details>
+    <summary>varA 里 A 级只用 32 拍，B 级要 43 拍，为什么不是 A 级等 B 级、而是 B 级反过来追 A 级？</summary>
+    <div class="a">
+      因为流水线的吞吐由<b>最慢的一级</b>决定。A 级 32 拍产出一行，B 级 43 拍消化一行，
+      长期看 B 级是瓶颈（吞吐 43 拍/行），A 级会不断追上去然后被 bank 卡住。
+      你看到的"B 追 A"是第一行刚启动时的暂态，稳态是 A 被 bank 挡住、B 满负荷。
+      <br><br>
+      这也是为什么 bank 占用（91 拍 ÷ 2 = 45.5）比 B 级的 43 稍微紧一点——两个瓶颈几乎打平，
+      varA 的 softmax 就在 45 拍/行附近，而不是 43。
+    </div>
+  </details>
+
+  <details>
+    <summary>把 erow 从 2 bank 加到 3 bank，varA 的 softmax 会变快吗？varB 呢？</summary>
+    <div class="a">
+      <b>varA：几乎不变。</b>加 bank 后吞吐上限从 45.5 降到 B 级的 43，
+      16 行只省 40 拍左右（1.4%），收益配不上多出来的 272 个触发器。
+      <br><br>
+      <b>varB：更不该加。</b>它的瓶颈根本不是 bank 数量，而是 bank 被多占了 64 拍。
+      正确做法是改释放时机（203→139），不是加 bank。加了 3 个 bank 反而会把那条
+      "靠 2 个 bank 限制 A 级领先"的隐式反压拆掉，<code>a2b_v</code> 覆盖的隐患就真会发作。
+    </div>
+  </details>
+
+  <details>
+    <summary>如果只允许改一行 RTL，改哪一行收益最大？</summary>
+    <div class="a">
+      <code>top_varB.sv</code> 里 C 级归一化结束时的 <code>bank_busy</code> 释放语句。
+      它一行换 −18% 周期、零面积、不动任何数值语义。<b>前提</b>是确认
+      <code>pu_row</code> / <code>nzrow_r</code> 在 P·V 段确实不依赖 <code>erow</code>——
+      确认过，<code>pr_c</code> 只在 <code>c_ph==0</code> 里被使用。
+      <br><br>
+      如果只能改 ref，那答案是 <code>attn_rne_shift</code> 的常量折叠：六个调用点里五个移位量是编译期常量，
+      现在每个都综合出变量桶形移位器 + 36 位减法器，白花 3% 面积还压在关键路径上。
+    </div>
+  </details>
+</section>
+
+<div class="foot">
+  数据来源：<code>hw/results/metrics.csv</code>（ref 9 665 / varA 2 855 / varB 1 738 拍，TT 25℃ GPDK045）、
+  <code>docs/engineering/03-RTL方案审视.md</code> 的面积账本、以及 <code>rtl/core/</code> 三个模块逐行核对。
+  周期数为 start→done，不含 256 拍输出回读。
+</div>
+
+</div>
+<script>
+  (function(){
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav a'));
+    var secs  = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+    function sync(){
+      var y = window.scrollY + 90, best = 0;
+      secs.forEach(function(s,i){ if(s && s.offsetTop <= y) best = i; });
+      links.forEach(function(a,i){ a.classList.toggle('on', i === best); });
+    }
+    window.addEventListener('scroll', sync, {passive:true});
+    sync();
+  })();
+</script>
+</body>
+</html>

@@ -63,7 +63,7 @@ export PDK CORNER SYN_LIB SYN_LEF SYN_DRIVE_CELL SYN_LOAD_PF \
        SYN_CLK_UNCERT_PCT SYN_IO_DELAY_PCT SYN_TOGGLE_RATE SYN_STATIC_PROB \
        SYN_CPUS SYN_PHYS
 
-.PHONY: all help check model modeltest err vec vecfsck vecfsck1 cfgof sim regress flowtest unit unitall lint syn synall pair pairall power pdkcheck collect table manifest preflight clean
+.PHONY: all help check model modeltest err vec vecfsck vecfsck1 cfgof sim regress flowtest unit unitall lint syn synall pair pairall power pdkcheck env collect table manifest preflight clean
 
 # 说明：这里刻意不用 shell 循环做变量间接引用——
 #       某些 Windows 环境下长命令行里的非 ASCII 会被截断，导致引号失配。
@@ -88,6 +88,7 @@ help:
 	@echo "  make power   VARIANT=<v> TAG=<t>     看已跑综合的功耗（同一次综合，无独立功耗工具）"
 	@echo "  make synall  VARIANT=<v> TAG=<t>     tt/ss/ff 三个角各综合一遍"
 	@echo "  make pdkcheck                        打印工艺库/约束参数（综合前自检）"
+	@echo "  make env                             采集环境清单 -> runs/env/ENV.md（工具版本/PDK文件/license）"
 	@echo "  make collect                         汇总 runs/ -> results/metrics.csv"
 	@echo "  make table                           生成报告用 markdown 表格"
 	@echo "  make manifest VARIANT=<v> TAG=<t>    写本次运行的可复现清单"
@@ -199,17 +200,50 @@ power: check
 	@echo "  toggle_rate=$(SYN_TOGGLE_RATE)  static_probability=$(SYN_STATIC_PROB)"
 	@echo "  （改这两项必须重跑 syn，否则 mW 与前一次不可比）"
 
-# 综合前的工具/库自检：库路径、工艺角、约束参数是否齐全且自洽
+# 综合前的工具/库自检：库路径、工艺角、约束参数是否齐全且自洽。
+# 除了"变量有没有定义"，还核对三类**文件是否真的在**（.lib × 三角 / LEF /
+# qrc / 门级模型 / techfile）。原因：变量名对、路径错是换机器最典型的故障，
+# 而它不报错，只在跑到一半时以 "lib not found" 或面积 0 的形式出现。
+# 文件缺失只告警不中断 —— Windows 侧本来就没有这些库，要在 VM 上才有意义。
 pdkcheck:
 	@echo "== PDK =="
 	@echo "  PDK      : $(PDK)"
 	@echo "  CORNER   : $(CORNER)   PVT: $(PVT)"
 	@echo "  时序库   : $(SYN_LIB)"
 	@echo "  LEF      : $(SYN_LEF)"
+	@echo "  qrc      : $(qrc_$(CORNER)_$(PDK))"
+	@echo "  门级模型 : $(verilog_$(PDK))"
+	@echo "  techfile : $(techfile_$(PDK))"
 	@echo "  驱动单元 : $(SYN_DRIVE_CELL)   负载: $(SYN_LOAD_PF) pF"
 	@echo "  不确定度 : $(SYN_CLK_UNCERT_PCT)% 周期   I/O 延迟: $(SYN_IO_DELAY_PCT)% 周期"
 	@test -n "$(SYN_LIB)" || { echo "✗ SYN_LIB 为空 —— config/pdk.mk 里没有 lib_$(CORNER)_$(PDK)"; exit 1; }
 	@test -n "$(SYN_LEF)" || { echo "✗ SYN_LEF 为空 —— config/pdk.mk 里没有 lef_$(PDK)"; exit 1; }
+	@echo "== 文件核对（VM 上应全部 ✓）=="
+	@for f in "$(lib_tt_$(PDK))" "$(lib_ss_$(PDK))" "$(lib_ff_$(PDK))" "$(SYN_LEF)"; do \
+	  if [ -f "$$f" ]; then echo "  ✓ $$f"; else echo "  ⚠ 缺失 $$f"; fi; \
+	done
+	@if [ -n "$(qrc_tt_$(PDK))" ]; then \
+	  for f in "$(qrc_tt_$(PDK))" "$(qrc_ss_$(PDK))" "$(qrc_ff_$(PDK))"; do \
+	    if [ -f "$$f" ]; then echo "  ✓ $$f"; else echo "  ⚠ 缺失 $$f"; fi; done; \
+	else echo "  · qrc 未定义：该 PDK 不支持寄生提取，make pnr 会拒绝执行"; fi
+	@if [ -n "$(verilog_$(PDK))" ] && [ -f "$(verilog_$(PDK))" ]; then \
+	  echo "  ✓ $(verilog_$(PDK))（门级仿真可用）"; \
+	elif [ -n "$(verilog_$(PDK))" ]; then echo "  ⚠ 缺失 $(verilog_$(PDK))（门级仿真不可用）"; \
+	else echo "  · 该 PDK 无门级模型（GPDK045 属于这类）"; fi
+	@if [ -n "$(techfile_$(PDK))" ] && [ -f "$(techfile_$(PDK))" ]; then \
+	  echo "  ✓ $(techfile_$(PDK))（tech LEF 的源，P&R 前先跑 gen_techlef.sh）"; \
+	elif [ -n "$(techfile_$(PDK))" ]; then echo "  ⚠ 缺失 $(techfile_$(PDK))"; \
+	else echo "  · 该 PDK 未登记 techfile（有官方 tech LEF 的库不需要）"; fi
+
+# 环境清单：现场采集机器 / 工具版本 / PDK 文件 / license -> runs/env/ENV.md。
+# 回答"报告里那张环境表的值是哪台机器、哪个版本上读来的"。
+# 报告引用 docs/engineering/11-环境与工具链清单.md，具体数值以本目标输出为准。
+env:
+	PDK=$(PDK) CORNER=$(CORNER) PVT=$(PVT) \
+	SYN_LIB=$(SYN_LIB) SYN_LEF=$(SYN_LEF) \
+	ENV_QRC=$(qrc_$(CORNER)_$(PDK)) ENV_VERILOG=$(verilog_$(PDK)) \
+	ENV_TECHFILE=$(techfile_$(PDK)) \
+	bash flow/env.sh
 
 # 三个角都综合一遍（签核用：tt 看典型、ss 看 setup、ff 看短路功耗）
 synall:

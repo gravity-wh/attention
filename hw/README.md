@@ -207,7 +207,11 @@ module top_varB `ATTN_TOP_PORTS;
 ```bash
 cd /root/work/hw
 
-# 0. 确认流程本身是好的（第一次跑、或改了 tb 之后必做）
+# 0. 环境自检：工具版本 / PDK 文件 / license（换机器、换库后必做）
+#    完整判读见 docs/engineering/11-环境与工具链清单.md
+make env && make pdkcheck
+
+# 0.5 确认流程本身是好的（第一次跑、或改了 tb 之后必做）
 make flowtest
 
 # 1. 提交前自检 —— 别用 git status 判断"有没有改东西"
@@ -269,9 +273,12 @@ git add -p && git commit -m "exp(syn): ref 基准 -> A=xx um2, D=xx us, E=xx nJ,
 | 环节 | 在哪做 | 说明 |
 |---|---|---|
 | 写代码 / 编辑 | Windows（NAS 上的工程） | NAS 是唯一真源，git 在这里 |
-| **仿真 / 覆盖率 / 波形** | **CentOS 7 虚拟机** | VCS V-2023.12-SP2 + Verdi + URG，license 正常 |
-| **综合 / 功耗** | **同一台虚拟机** | Cadence **Genus 15.2**（`/opt/cadence/GENUS152`） |
+| **仿真 / 覆盖率 / 波形** | **CentOS 7.9 虚拟机** | VCS V-2023.12-SP2 + Verdi + URG，license 正常 |
+| **综合 / 功耗** | **同一台虚拟机** | Cadence **Genus 15.20-p004_1**（`/opt/cadence/GENUS152`） |
+| **布局布线 / 寄生提取** | 同一台虚拟机 | Cadence **Innovus 15.20**（`/opt/cadence/INNOVUS152`）+ 内置 QRC |
+| tech LEF 生成（P&R 前置） | 同一台虚拟机 | Virtuoso **IC617** + `lefout`（`flow/pnr/gen_techlef.sh`） |
 | 快速语法检查 | 虚拟机里 VCS 编译（1~2 秒） | 见下：iverilog 已退役 |
+| DRC / LVS | **未执行** | Calibre rule deck 在 NAS，流程未接入 |
 
 **结论：不要再往 Windows 或 WSL 上装仿真器。** 虚拟机里 VCS 编译这个规模的 RTL
 只要 1~2 秒，比"先装个 iverilog 本地跑一遍再同步"还快，而且少一条工具链要维护。
@@ -283,8 +290,17 @@ VCS_HOME    = /root/synopsys_apps/vcs/vcs/V-2023.12-SP2      （14 GB）
 VERDI_HOME  = /root/synopsys_apps/verdi/verdi/V-2023.12-SP2  （23 GB）
 SCL_HOME    = /root/synopsys_apps/scl/2021.03                （license 守护）
 license     = 27000@localhost.localdomain，FLEXlm host ID 000c293bbc9b
-Genus       = /opt/cadence/GENUS152/bin/genus
+Genus       = /opt/cadence/GENUS152/bin/genus                （15.20-p004_1）
+Innovus     = /opt/cadence/INNOVUS152                        （15.20）
+PDK(主用)   = /opt/cadence/PDK/smic40/sc9mc_base_rvt_c40/r1p1
 ```
+
+环境变量的完整判读、PDK 文件级清单（三角 `.lib`、macro-only LEF、qrc、门级模型、
+techfile 两个版本的 md5）、license 混杂项、性能基线、以及报告里必须带的限定语，
+统一记在 **`docs/engineering/11-环境与工具链清单.md`**。
+
+现场值不靠手抄：在 VM 里跑 `make env`，会把机器、工具版本、PDK 文件、license
+实测一遍写到 `runs/env/ENV.md`；`make pdkcheck` 另外核对三角库/LEF/qrc 是否存在。
 
 环境变量写在 `/etc/profile.d/synopsys.sh`，并在 `/etc/bashrc` 里兜底 source，
 所以**登录 shell、`bash -c`、`make` 子进程都能拿到**（早期只写在 root 的 `.bashrc` 里，

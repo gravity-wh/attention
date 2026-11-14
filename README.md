@@ -37,6 +37,8 @@ E:\candence_env\share\sync_from_nas.bat
 /root/work/prepare.sh && cd /root/work/hw
 
 make help                      # 看方案清单与全部目标
+make env                       # 环境清单（工具版本/PDK 文件/license）→ runs/env/ENV.md
+make pdkcheck                  # 库/角/qrc/techfile 逐项核对（换机器必跑）
 make flowtest                  # 自检流程本身（不需要 RTL，30 秒）
 make vec  SEED=20260101        # 黄金模型导出测试向量
 make regress VARIANT=ref MODE=smoke

@@ -77,6 +77,14 @@ qrc_tt_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_tt_typi
 qrc_ss_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_ss_typical_max_0p99v_125c.cl/qrcTechFile_RCgen
 qrc_ff_SC9MC := $(SC9MC_DIR)/voltagestorm/sc9mc_logic0040ll_base_rvt_c40_ff_typical_min_1p21v_m40c.cl/qrcTechFile_RCgen
 
+# tech LEF 的源文件：Virtuoso ASCII techfile。
+#   SMIC40 交付包里**没有官方 tech LEF**，只有这份 .tf（6LM_1TM 版），
+#   所以 flow/pnr/gen_techlef.sh 先把它转成 OA tech.db、再用 lefout 导出。
+#   ⚠ 同目录下 PDK 另有 9LM_1TM 版（在 NAS 的 40nm_TF 下），换版会改变上层
+#     可用布线层数；本流程信号层到 M5，两版都够，但必须知道用的是哪一版
+#     （md5 见 docs/engineering/11 §6.2）。
+techfile_SC9MC := /opt/cadence/PDK/smic40/smic40ll/techfile.tf
+
 # 门级仿真的单元行为模型（GPDK045 没有这份，所以那边做不了门级仿真）
 verilog_SC9MC := $(SC9MC_DIR)/verilog/sc9mc_logic0040ll_base_rvt_c40.v
 
