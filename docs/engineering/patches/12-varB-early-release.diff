@@ -1,0 +1,25 @@
+diff --git a/hw/rtl/varB/top_varB.sv b/hw/rtl/varB/top_varB.sv
+index ee067fd..c89c9c5 100644
+--- a/hw/rtl/varB/top_varB.sv
++++ b/hw/rtl/varB/top_varB.sv
+@@ -339,6 +339,11 @@ module top_varB `ATTN_TOP_PORTS;
+             c_acc    <= 64'sd0;
+             pv_first <= 1'b1;
+             pv_done  <= 2'd0;
++            // 归一化已把 erow[c_bank] 整行读完；P·V 只读 pu_row / nzrow_r，
++            // 不再碰 erow —— 所以 bank 在这里就能放，不必等到 P·V 结束。
++            // 释放当拍 bank_busy 仍为 1，A 最早下一拍才可能拿到，读写不重叠。
++            if (c_bank == 2'd0) bank_busy[0] <= 1'b0;
++            else                bank_busy[1] <= 1'b0;
+           end else begin
+             c_j <= c_j + 4'd1;
+           end
+@@ -361,8 +366,6 @@ module top_varB `ATTN_TOP_PORTS;
+               // 最后一个元素在 c 级就送出了，done 必须与它同拍：tb 靠 done 记
+               // 时延，而且收到 256 个就退出循环，done 晚一拍就再也记不到。
+               if (c_row == N-1) done <= 1'b1;
+-              if (c_bank == 2'd0) bank_busy[0] <= 1'b0;
+-              else                bank_busy[1] <= 1'b0;
+             end else begin
+               c_j <= c_j + 4'd1;
+             end

@@ -262,8 +262,8 @@ footer .sep{flex:1}
     </div>
     <div>
       <div class="k">ref 基准 · 时延</div>
-      <div class="v">9665<small> 拍</small></div>
-      <div class="n">@100 MHz ≈ 96.7 µs</div>
+      <div class="v">10433<small> 拍</small></div>
+      <div class="n">@100 MHz ≈ 104.3 µs（含装载 768）</div>
     </div>
     <div>
       <div class="k">验证 · 逐位一致</div>
@@ -455,7 +455,7 @@ footer .sep{flex:1}
         结构　单 MAC 串行点积<br>
         数值　qb16 / qf13（贴近 FP16）<br>
         频率　<b>100 MHz</b><br>
-        实测　<b>9665 拍</b> · 六类 PASS<br>
+        实测　<b>10433 拍</b>（含装载） · 六类 PASS<br>
         综合　<b>171 005 µm²</b> · WNS 0 ns · 40.5 mW
       </div>
     </div>
@@ -468,7 +468,7 @@ footer .sep{flex:1}
         结构　4 lane + 稀疏跳过 + Softmax 流水<br>
         数值　qb10 / qf7<br>
         频率　<b>100 MHz</b>（三方案同频）<br>
-        实测　<b>2855 拍</b> · 六类 PASS · RMSE 0.0025
+        实测　<b>3623 拍</b>（含装载） · 六类 PASS · RMSE 0.0025
       </div>
     </div>
     <div class="var-card b">
@@ -480,7 +480,7 @@ footer .sep{flex:1}
         结构　行融合 + 4 lane（与 A 同 lane 数）<br>
         数值　qb10 / qf7（与 A 相同）<br>
         频率　<b>100 MHz</b>（三方案同频）<br>
-        实测　<b>1738 拍</b> · 六类 PASS · RMSE 0.0025
+        实测　<b>2506 拍</b>（含装载） · 六类 PASS · RMSE 0.0025
       </div>
     </div>
   </div>
@@ -524,8 +524,8 @@ footer .sep{flex:1}
       <rect x="36" y="222" width="226" height="40" fill="#F5F4EF" stroke="#D2CCBC"/>
       <text x="48" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
       <text x="48" y="255" font-size="10.5" fill="#6B675E" font-family="monospace">同一条 MAC ｜ 4096 拍 ＋ 输出 256</text>
-      <text x="36" y="288" font-size="10.5" fill="#9E3B32" font-family="monospace">合计 9665 拍 ≈ 96.7 µs（实测）</text>
-      <text x="36" y="304" font-size="10" fill="#9A9484">慢是故意的——它就是分母</text>
+      <text x="36" y="288" font-size="10.5" fill="#9E3B32" font-family="monospace">合计 9665 拍（纯计算）＋ 768 装载</text>
+      <text x="36" y="304" font-size="10" fill="#9A9484">= 10433 拍 ≈ 104.3 µs · 它就是分母</text>
 
       <!-- panel 2 -->
       <rect x="299" y="16" width="262" height="298" fill="#FFFFFF" stroke="#CFDFEA"/>
@@ -550,7 +550,7 @@ footer .sep{flex:1}
       <rect x="317" y="222" width="226" height="40" fill="#EAF1F6" stroke="#CFDFEA"/>
       <text x="329" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
       <text x="329" y="255" font-size="10.5" fill="#25506C" font-family="monospace">同一 4 lane 阵列复用 ｜ 零组跳过</text>
-      <text x="317" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">2855 拍</tspan>（实测）· 理想 1/4</text>
+      <text x="317" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">3623 拍</tspan>（含装载）· 理想 1/4</text>
       <text x="317" y="304" font-size="10" fill="#9A9484">隔离变量：并行度（数值格式不变）</text>
 
       <!-- panel 3 -->
@@ -576,7 +576,7 @@ footer .sep{flex:1}
       <rect x="598" y="222" width="226" height="40" fill="#E9F3EE" stroke="#CBE2D6"/>
       <text x="610" y="240" font-size="11" font-weight="600" fill="#1B1A17">Y = P·V</text>
       <text x="610" y="255" font-size="10.5" fill="#22604A" font-family="monospace">同一 4 lane 阵列复用 ｜ P 边出边乘</text>
-      <text x="598" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">1738 拍</tspan>（实测）· 靠数据复用压缩调度开销</text>
+      <text x="598" y="288" font-size="10.5" fill="#6B675E" font-family="monospace">周期数 <tspan fill="#9E3B32">2506 拍</tspan>（含装载）· 靠数据复用压缩调度开销</text>
       <text x="598" y="304" font-size="10" fill="#9A9484">隔离变量：数据流形态（lane 数与 A 同为 4）</text>
     </svg>
     <figcaption><b>图 2</b>　三方案的数据流与并行度。周期数均为实测值（<code>results/metrics.csv</code>）；
@@ -875,15 +875,15 @@ footer .sep{flex:1}
       <!-- DUTs -->
       <rect x="56" y="154" width="240" height="54" fill="#F5F4EF" stroke="#D2CCBC"/>
       <text x="70" y="175" font-size="12" font-weight="600" fill="#45423B" font-family="monospace">top_ref</text>
-      <text x="70" y="194" font-size="10.5" fill="#78736A">串行 · 100 MHz · 9665 拍</text>
+      <text x="70" y="194" font-size="10.5" fill="#78736A">串行 · 100 MHz · 10433 拍</text>
 
       <rect x="320" y="154" width="240" height="54" fill="#EAF1F6" stroke="#CFDFEA"/>
       <text x="334" y="175" font-size="12" font-weight="600" fill="#25506C" font-family="monospace">top_varA</text>
-      <text x="334" y="194" font-size="10.5" fill="#5E7E93">4 lane · 100 MHz · 2855 拍</text>
+      <text x="334" y="194" font-size="10.5" fill="#5E7E93">4 lane · 100 MHz · 3623 拍</text>
 
       <rect x="584" y="154" width="240" height="54" fill="#E9F3EE" stroke="#CBE2D6"/>
       <text x="598" y="175" font-size="12" font-weight="600" fill="#22604A" font-family="monospace">top_varB</text>
-      <text x="598" y="194" font-size="10.5" fill="#5E8A76">行融合 · 100 MHz · 1738 拍</text>
+      <text x="598" y="194" font-size="10.5" fill="#5E8A76">行融合 · 100 MHz · 2506 拍</text>
 
       <!-- core -->
       <rect x="56" y="228" width="768" height="44" fill="#FFFFFF" stroke="#D2CCBC"/>
@@ -1194,9 +1194,9 @@ footer .sep{flex:1}
       <tr><td>向量</td><td>六类激励导出器，跨平台逐字节可复现</td><td class="c"><span class="tag ok">完成</span></td><td>37 文件 Linux/Windows 全同</td></tr>
       <tr><td>验证</td><td>一份 tb 三 DUT、双判据、六类语义、覆盖率采样</td><td class="c"><span class="tag ok">完成</span></td><td><code>make flowtest</code> 双向验证</td></tr>
       <tr><td>流程</td><td>VCS 编译/仿真/回归、Genus 综合、指标汇总</td><td class="c"><span class="tag ok">完成</span></td><td><code>hw/flow/</code></td></tr>
-      <tr><td>ref RTL</td><td>串行单 MAC，六类各 2 任务全 PASS</td><td class="c"><span class="tag ok">完成</span></td><td>0 失配 · 9665 拍</td></tr>
-      <tr><td>varA RTL</td><td>4 lane 并行点积</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 2855 拍 · RMSE 0.002492；综合三角见 <code>05</code></td></tr>
-      <tr><td>varB RTL</td><td>行融合 + 4 lane 并行</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 1738 拍 · RMSE 0.002492；面积 2.35× / 功耗 2.53× 领先</td></tr>
+      <tr><td>ref RTL</td><td>串行单 MAC，六类各 2 任务全 PASS</td><td class="c"><span class="tag ok">完成</span></td><td>0 失配 · 10 433 拍（含装载 768）</td></tr>
+      <tr><td>varA RTL</td><td>4 lane 并行点积</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 3 623 拍（含装载 768） · RMSE 0.002492；综合三角见 <code>05</code></td></tr>
+      <tr><td>varB RTL</td><td>行融合 + 4 lane 并行</td><td class="c"><span class="tag ok">完成</span></td><td>仿真 0 失配 · 2 506 拍（含装载 768） · RMSE 0.002492；面积 2.35× / 功耗 2.53× 领先</td></tr>
       <tr><td>综合数字</td><td>面积 / WNS / 功耗 / 能耗三方案成对</td><td class="c"><span class="tag ok">9/9 完成</span></td><td><code>metrics.csv</code>（SC9MC）：三方案×三角 WNS 均 ≥ 0（最差 +0.005 ns）；ref tt 171 005 µm² · 40.55 mW · varB tt 72 844 µm² · 16.02 mW</td></tr>
       <tr><td>后端 P&R（ref）</td><td>布局 → CTS → 布线 → qrc 提取 → 后布线 STA → 网表/DEF，全流程闭环</td><td class="c"><span class="tag wip">非签核</span></td><td><code>07-后端PR结果.md</code>：两条限定——tech LEF 为工具生成（本地无官方版）＋ 未做后布线优化；报告引用必须带上</td></tr>
       <tr><td>报告</td><td>表 1/2/3 ＋ 个人贡献说明</td><td class="c"><span class="tag plan">待写</span></td><td>—</td></tr>
