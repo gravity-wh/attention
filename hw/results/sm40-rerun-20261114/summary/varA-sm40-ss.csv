@@ -1,0 +1,7 @@
+tag,variant,cat,tasks,pass,fail,lat_min,lat_avg,lat_max,worst_rmse,worst_maxae,mismatch,status
+varA-sm40-ss,varA,random,200,200,0,2855,2855,2855,0.001863,0.006034,0,PASS,768
+varA-sm40-ss,varA,zero,4,4,0,2855,2855,2855,0.000537,0.001488,0,PASS,768
+varA-sm40-ss,varA,extreme,200,200,0,2759,2759,2759,0.000187,0.000590,0,PASS,768
+varA-sm40-ss,varA,cancel,200,200,0,2087,2471,2855,0.002492,0.005410,0,PASS,768
+varA-sm40-ss,varA,reset,4,4,0,2855,2855,2855,0.001889,0.006034,0,PASS,768
+varA-sm40-ss,varA,cont,8,8,0,2855,2855,2855,0.001728,0.005767,0,PASS,768

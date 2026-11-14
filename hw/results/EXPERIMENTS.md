@@ -67,3 +67,11 @@
 | 2026-10-29 | `ref-syn-tt` | 第一次完整综合（17.5 min）跑完后取数 | `metrics.csv` 里面积/WNS/功耗全是 MISSING | Genus 15.20 没有 `get_attribute [get_designs X] area` 与 `get_timing_paths`。**17 分钟没白跑**：报告文本是完整的，改 `parse_syn.py` 从 `area/timing/power/qor.rpt` 解析后数字全回来了（且单位是 ps/nW，不是默认的 ns/mW） |
 | 2026-10-29 | `ref-sim` | 六类回归 | random/zero/extreme/cont 通过，cancel/reset 的日志是**空文件** | 另一条跑道的 `pkill -f simv` 把 VCS 进程杀了（VCS 因 ASLR 会 re-exec 一次，正好在重启瞬间被打中）。给仿真器改名 `SIMV_NAME` 后六类全过 |
 | 2026-10-29 | — | 用 `runvm.sh` 跑综合 | 等了 8 分钟，客户机上 `/root/work/hw/runs` 里根本没有本轮目录 | 另一个会话也在调 `runvm.sh`，它的 `rm -rf /root/work/hw` 删掉了我的工作目录；`flock` 只挡同一脚本的并发调用。改用独立目录 `/root/syn_work` 后一次跑通 |
+
+## 运行日志（每次 `make collect` 记一行）
+
+| 时间 | 范围 | 结果 | 落点 |
+|---|---|---|---|
+| 2026-11-14 22:03 | varB 全量 616 例（旧 tb，`ld` 未上报） | 六类 PASS、`mism 0`、`lat 1423` | `runs/_archive/varB-early-*` |
+| 2026-11-14 23:16 | ref/varA/varB 三方案 tt 全量 + 综合（新 tb，`ld=768` 实测） | 九行里的三行 PASS、`mism 0` | `runs/*-sm40-tt` |
+| 2026-11-14 23:41 | ss/ff 六个角补仿真半边（varB 两角连综合重做） | 九行全部配对，`D₀/D` 三角同为 2.88 / 4.76 | `runs/*-sm40-{ss,ff}`，原始件见 `sm40-rerun-20261114/` |

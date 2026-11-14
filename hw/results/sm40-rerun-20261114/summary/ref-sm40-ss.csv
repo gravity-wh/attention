@@ -1,0 +1,7 @@
+tag,variant,cat,tasks,pass,fail,lat_min,lat_avg,lat_max,worst_rmse,worst_maxae,mismatch,status
+ref-sm40-ss,ref,random,200,200,0,9665,9665,9665,0.000125,0.000521,0,PASS,768
+ref-sm40-ss,ref,zero,4,4,0,9665,9665,9665,0.000073,0.000252,0,PASS,768
+ref-sm40-ss,ref,extreme,200,200,0,9665,9665,9665,0.000187,0.000590,0,PASS,768
+ref-sm40-ss,ref,cancel,200,200,0,9665,9665,9665,0.000140,0.000471,0,PASS,768
+ref-sm40-ss,ref,reset,4,4,0,9665,9665,9665,0.000128,0.000573,0,PASS,768
+ref-sm40-ss,ref,cont,8,8,0,9665,9665,9665,0.000117,0.000332,0,PASS,768
