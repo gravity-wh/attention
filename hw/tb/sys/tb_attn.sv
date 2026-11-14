@@ -153,6 +153,10 @@ module tb_attn;
   int    ntasks;
   bit    verbose;
   int    lat, ord, recv, mismatch, nf, rdiff;
+  // 装载拍数：题目要求"从开始装载到结果全部输出"，所以这一段必须可测而不是
+  // 在脚本里硬写 768。drive_load() 返回它自己花了多少拍，主流程取最坏值上报，
+  // 由 flow/collect 折进 cycles（方案 A：不改 RTL、不改端口）。
+  int    ld_cyc, ld_min, ld_max;
   bit    passv;
   real   rmse, maxae;
   string base;
@@ -228,7 +232,10 @@ module tb_attn;
   endtask
 
   // 装载 3×256 个元素。地址 0..255 行主序，ld_sel: 0=Q 1=K 2=V
-  task automatic drive_load();
+  // cyc 返回 ld_en 保持为高的拍数（一拍一个元素），供 collect 折进端到端周期。
+  task automatic drive_load(output int cyc);
+    int n;
+    n = 0;
     for (int sel = 0; sel < 3; sel++) begin
       for (int a = 0; a < NE; a++) begin
         @(negedge clk);
@@ -236,10 +243,12 @@ module tb_attn;
         ld_sel  = sel[1:0];
         ld_addr = a[7:0];
         ld_data = qkv[sel*NE + a];
+        n++;
       end
     end
     @(negedge clk);
     ld_en = 1'b0;
+    cyc = n;
   endtask
 
   // 跑一个任务：握手 + 收输出 + 协议检查
@@ -359,7 +368,9 @@ module tb_attn;
       end else begin
         do_reset(3);
       end
-      drive_load();
+      drive_load(ld_cyc);
+      if (ld_cyc > ld_max || ld_max == 0) ld_max = ld_cyc;
+      if (ld_cyc < ld_min || ld_min == 0) ld_min = ld_cyc;
 
       // ---- 运行 ----
       run_task(lat, ord, recv);
@@ -372,7 +383,7 @@ module tb_attn;
       if (cat_name == "reset") begin
         for (int i = 0; i < NE; i++) outv_first[i] = outv[i];
         do_reset(3);
-        drive_load();
+        drive_load(ld_cyc);
         run_task(lat, ord, recv);
         if (lat < 0) begin n_task_fail++; continue; end
 
@@ -417,8 +428,8 @@ module tb_attn;
     $display("----------------------------------------------------------------");
     $display(" 类别 %-10s  任务 %0d/%0d 通过", cat_name, n_task_pass, n_task_pass + n_task_fail);
     if (n_task_pass + n_task_fail > 0)
-      $display(" 时延 lat: min=%0d avg=%0d max=%0d 周期（@%0d MHz）",
-               lat_min, lat_sum / (n_task_pass + n_task_fail), lat_max, CLK_MHZ);
+      $display(" 时延 lat: min=%0d avg=%0d max=%0d 周期（@%0d MHz）；另装载 %0d 拍/任务",
+               lat_min, lat_sum / (n_task_pass + n_task_fail), lat_max, CLK_MHZ, ld_max);
     $display(" 最差 RMSE=%0.6f  最差 max|e|=%0.6f  最大逐位失配=%0d 个元素",
              worst_rmse, worst_ae, worst_mism);
     if (n_proto_warn > 0)
@@ -426,11 +437,13 @@ module tb_attn;
     $display(" 覆盖率：cat=%0s lat_b=%0d mism_b=%0d", cat_name, cov_lat_b, cov_mis_b);
 
     // 机器可读汇总行：flow/ 下的脚本只认这一行，不要改成中文去 parse
-    $display("[SUMMARY] cat=%0s tasks=%0d pass=%0d fail=%0d lat_min=%0d lat_avg=%0d lat_max=%0d rmse=%0.6f maxae=%0.6f mism=%0d status=%0s",
+    // ld= 是方案 A 的装载拍数（实测，不硬编码）。端到端周期 = ld + lat_max，
+    // 由 flow/collect 相加；lat 本身仍是 start→done，保持与旧数据可比。
+    $display("[SUMMARY] cat=%0s tasks=%0d pass=%0d fail=%0d lat_min=%0d lat_avg=%0d lat_max=%0d ld=%0d rmse=%0.6f maxae=%0.6f mism=%0d status=%0s",
              cat_name, n_task_pass + n_task_fail, n_task_pass, n_task_fail,
              lat_min,
              (n_task_pass + n_task_fail) ? (lat_sum / (n_task_pass + n_task_fail)) : 0,
-             lat_max, worst_rmse, worst_ae, worst_mism,
+             lat_max, ld_max, worst_rmse, worst_ae, worst_mism,
              (n_task_fail == 0) ? "PASS" : "FAIL");
 
     if (n_task_fail == 0) begin

@@ -33,9 +33,10 @@ import os
 import sys
 
 # 与 EXPERIMENTS.md 表 2 的列一一对应，顺序也一致
+# cycles = 端到端（含装载，方案 A）；cycles_calc = start→done 纯计算拍数，只作溯源
 COLS = [
     "tag", "variant", "commit", "pvt", "pdk",
-    "clk_mhz", "cycles", "delay_us",
+    "clk_mhz", "cycles", "cycles_calc", "delay_us",
     "area_um2", "cells", "regs",
     "wns_ns", "tns_ns", "fmax_mhz",
     "power_mw", "leakage_mw", "energy_nj",
@@ -80,7 +81,7 @@ def read_sim(path):
             for row in csv.reader(f):
                 if len(row) < 13:
                     continue
-                # TAG,VARIANT,CAT,TASKS,PASS,FAIL,LMIN,LAVG,LMAX,RMSE,MAXAE,MIS,STATUS
+                # TAG,VARIANT,CAT,TASKS,PASS,FAIL,LMIN,LAVG,LMAX,RMSE,MAXAE,MIS,STATUS[,LD]
                 cat = row[2]
                 try:
                     lmax = int(row[8]); rmse = float(row[9])
@@ -89,6 +90,14 @@ def read_sim(path):
                     continue
                 if "cycles" not in worst or lmax > worst["cycles"]:
                     worst["cycles"] = lmax
+                # 装载拍数：新版 tb 才有第 14 列；老 runs 记 0，行为与改口径前一致
+                if len(row) > 13:
+                    try:
+                        ld = int(row[13])
+                    except ValueError:
+                        ld = 0
+                    if ld > worst.get("ld", 0):
+                        worst["ld"] = ld
                 if "rmse" not in worst or rmse > worst["rmse"]:
                     worst["rmse"] = rmse
                 if "maxae" not in worst or maxae > worst["maxae"]:
@@ -191,7 +200,14 @@ def main():
             # 缺的只是"面积/功耗"，不该连时延一起丢掉。
             clk = fnum(syn.get("clk_mhz")) or info_clock(info)
             pwr = fnum(syn.get("power_mw"))
-            cyc = sim.get("cycles")
+            # 方案 A（2026-11-14 决议）：cycles 是端到端，含 tb 实测的装载拍数。
+            # cycles_calc 保留 start→done 的纯计算拍数，用于和旧数据、和
+            # cycle_model.py 的预测值对账 —— 模型给的是 calc，不是端到端。
+            cyc_calc = sim.get("cycles")
+            ld = sim.get("ld", 0) or 0
+            if cyc_calc is not None and cyc_calc <= 0:
+                cyc_calc = None                  # -1 = TIMEOUT，别拿去算负数时延
+            cyc = (cyc_calc + ld) if cyc_calc else None
             delay = (cyc / clk) if (cyc and clk) else None
             energy = (pwr * delay) if (pwr is not None and delay) else None
 
@@ -213,6 +229,7 @@ def main():
                 "pdk": info.get("pdk", ""),
                 "clk_mhz": clk,
                 "cycles": cyc,
+                "cycles_calc": cyc_calc,
                 "delay_us": delay,
                 "area_um2": fnum(syn.get("area_um2")),
                 "cells": syn.get("cells"),

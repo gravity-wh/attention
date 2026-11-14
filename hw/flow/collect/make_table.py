@@ -23,7 +23,8 @@ T2 = [
     ("内部格式", None, None),          # 由 tag/variant 侧信息补，暂留空
     ("面积 A (µm²)", "area_um2", 1),
     ("频率 (MHz)", "clk_mhz", 0),
-    ("周期数", "cycles", 0),
+    ("周期数（含装载）", "cycles", 0),
+    ("其中装载", "ld_pk", 0),
     ("时延 D (µs)", "delay_us", 2),
     ("功率 P (mW)", "power_mw", 3),
     ("能耗 E (nJ)", "energy_nj", 3),
@@ -41,6 +42,12 @@ def load(path):
     rows = []
     with open(path, newline="", errors="replace") as f:
         for r in csv.DictReader(f):
+            # 装载拍数 = 端到端 − 纯计算。单独列出来，是为了让读者一眼看出
+            # "周期数"里有多少是 I/O、多少是算出来的（方案 A 的口径要求）。
+            try:
+                r["ld_pk"] = str(int(r.get("cycles") or 0) - int(r.get("cycles_calc") or 0))
+            except ValueError:
+                r["ld_pk"] = ""
             rows.append(r)
     return rows
 

@@ -1,6 +1,6 @@
 """cycle_model.py -- 三方案周期数的控制级核算模型
 
-用途：不跑仿真，按 RTL 状态机逐拍推演，验证 metrics.csv 里的 cycles
+用途：不跑仿真，按 RTL 状态机逐拍推演，验证 metrics.csv 里的 cycles_calc（start→done）
       并对拍数做分段归因（QK / softmax / PV、每行节奏）。
       三个方案的结果必须与实测逐拍相同，否则说明模型漏了某个握手。
 
@@ -347,11 +347,18 @@ def sim_vara():
     return n, seg, False, trace
 
 
-def sim_varb():
-    """varB：整条行流水（A: QK+exp / B: 倒数 / C: 归一+P·V）"""
+def sim_varb(nb=2, early_release=False):
+    """varB：整条行流水（A: QK+exp / B: 倒数 / C: 归一+P·V）
+
+    nb            : erow 的 bank 数。2 = 现实现；3 = 多一级缓冲（只改 FF，不改数值）
+    early_release : True = C 在归一化结束就放 bank（P·V 只读 pu_row / nzrow_r，不碰 erow）。
+                    这是 docs/engineering/12-P2-工作包.md §3 提的改法，预期 1423 拍。
+
+    两个开关都只改控制时序，不改任何数据通路，所以数值逐位一致的证明与它们无关。
+    """
     st = 'IDLE'
     nfin = 0
-    bank_busy = [False, False]
+    bank_busy = [False] * nb
     a_busy = False
     a_ph = 0
     a_row = 0
@@ -359,9 +366,12 @@ def sim_varb():
     a_g = 0
     a_bank = 0
     a2b_v = False
+    a2b_b = 0
     b_busy = False
     b2c_v = False
+    b2c_b = 0
     c_busy = False
+    c_bank = 0
     c_ph = 0
     c_row = 0
     c_j = 0
@@ -382,9 +392,12 @@ def sim_varb():
         n_bank = list(bank_busy)
         n_a_busy, n_a_ph, n_a_row, n_a_j, n_a_g, n_a_bank = a_busy, a_ph, a_row, a_j, a_g, a_bank
         n_a2b_v = a2b_v
+        n_a2b_b = a2b_b
         n_b_busy = b_busy
         n_b2c_v = False
+        n_b2c_b = b2c_b
         n_c_busy = c_busy
+        n_c_bank = c_bank
         n_c_ph = c_ph
         n_c_row = c_row
         n_c_j = c_j
@@ -396,12 +409,12 @@ def sim_varb():
             seg['wall'] += 1
             # A
             if not a_busy:
-                if a_row < N and not (bank_busy[0] and bank_busy[1]):
+                if a_row < N and (False in bank_busy):
                     n_a_busy = True
                     n_a_ph = 0
                     n_a_j = 0
                     n_a_g = 0
-                    n_a_bank = 1 if bank_busy[0] else 0
+                    n_a_bank = bank_busy.index(False)
                     n_bank[n_a_bank] = True
                     trace['a_start'].append((n, a_row))
             elif a_ph == 0:
@@ -421,6 +434,7 @@ def sim_varb():
                     n_a_busy = False
                     n_a_row = a_row + 1
                     n_a2b_v = True
+                    n_a2b_b = a_bank
                 else:
                     n_a_j = a_j + 1
             # B
@@ -432,6 +446,7 @@ def sim_varb():
             elif r_done_seen:
                 n_b_busy = False
                 n_b2c_v = True
+                n_b2c_b = a2b_b
             # C
             if not c_busy:
                 if b2c_v:
@@ -439,6 +454,7 @@ def sim_varb():
                     n_c_ph = 0
                     n_c_j = 0
                     n_b2c_v = False
+                    n_c_bank = b2c_b
                     trace['c_start'].append((n, c_row))
             elif c_ph == 0:
                 seg['C'] += 1
@@ -447,6 +463,9 @@ def sim_varb():
                     n_c_j = 0
                     n_pv_first = True
                     n_pv_done = 0
+                    # 归一化已把 erow 该行读完 → P·V 只用 pu_row / nzrow_r，可以提前放 bank
+                    if early_release:
+                        n_bank[c_bank] = False
                 else:
                     n_c_j = c_j + 1
             else:
@@ -470,10 +489,8 @@ def sim_varb():
                         if c_row == N - 1:
                             n_done = True
                         trace['c_done'].append((n, c_row))
-                        if n_bank[0]:
-                            n_bank[0] = False
-                        else:
-                            n_bank[1] = False
+                        if not early_release:
+                            n_bank[c_bank] = False
                     else:
                         n_c_j = c_j + 1
 
@@ -508,9 +525,12 @@ def sim_varb():
         bank_busy = n_bank
         a_busy, a_ph, a_row, a_j, a_g, a_bank = n_a_busy, n_a_ph, n_a_row, n_a_j, n_a_g, n_a_bank
         a2b_v = n_a2b_v
+        a2b_b = n_a2b_b
         b_busy = n_b_busy
         b2c_v = n_b2c_v
+        b2c_b = n_b2c_b
         c_busy = n_c_busy
+        c_bank = n_c_bank
         c_ph = n_c_ph
         c_row = n_c_row
         c_j = n_c_j
@@ -524,20 +544,71 @@ def sim_varb():
     return n, seg, False, trace
 
 
-res = {}
-for name, fn, ref in [('ref', sim_ref, 9665), ('varA', sim_vara, 2855), ('varB', sim_varb, 1738)]:
-    out = fn()
-    cycles, seg, ok = out[0], out[1], out[2]
-    tr = out[3] if len(out) > 3 else None
-    res[name] = (cycles, seg, tr)
-    print(f'{name:5s} sim={cycles:6d}  csv={ref:6d}  diff={cycles-ref:+4d}   done={ok}')
-    print('        ', {k: v for k, v in seg.items() if v})
-    if tr:
-        ast = [t for t, _ in tr['a_start']][:6]
-        cst = [t for t, _ in tr.get('c_start', [])][:6]
-        cdn = [t for t, _ in tr['c_done']]
-        print('         A start:', ast, '... C start:', cst)
-        print('         C done :', cdn[:6], '... last', cdn[-3:] if cdn else None)
+if __name__ == '__main__':
+    import sys
+    from collections import Counter
+
+    def study():
+        """bank / 释放点 的组合实验：验 docs/engineering/12-P2-工作包.md §3 的目标拍数。
+
+        跑法：python hw/flow/collect/cycle_model.py --study
+
+        判据不是"跑出 1423 就对了"，而是先看现状行（必须 1738 且行间隔 81/126 交替），
+        基线对得上，后面几行才有意义。
+        """
+        print('== varB 的 bank / 释放点 组合（逐拍模型，非波形）==')
+        print(f'{"配置":38s} {"总拍":>6s}  行间隔分布            前导')
+        for label, kw in [
+            ('现状：2 bank，PV 末释放',        dict()),
+            ('2 bank，归一末释放',             dict(early_release=True)),
+            ('3 bank，PV 末释放',              dict(nb=3)),
+            ('3 bank，归一末释放',             dict(nb=3, early_release=True)),
+        ]:
+            cyc, seg, ok, tr = sim_varb(**kw)
+            cdn = [t for t, _ in tr['c_done']]
+            cst = [t for t, _ in tr['c_start']]
+            ast = [t for t, _ in tr['a_start']]
+            gaps = Counter(cdn[i + 1] - cdn[i] for i in range(len(cdn) - 1))
+            gs = ' '.join(f'{k}×{v}' for k, v in sorted(gaps.items()))
+            print(f'{label:36s} {cyc:6d}  {gs:20s}  {cst[0] - ast[0]:3d}')
+            if not ok:
+                print('   ✗ 未收敛（TIMEOUT）—— 这个配置有死锁，不能只看拍数')
+
+    def detail():
+        """把 1423 拆成可手算的几项，方便和仿真对账。"""
+        for label, kw in [('现状 1738', dict()), ('早释放 1423', dict(early_release=True))]:
+            cyc, seg, ok, tr = sim_varb(**kw)
+            cdn = [t for t, _ in tr['c_done']]
+            cst = [t for t, _ in tr['c_start']]
+            ast = [t for t, _ in tr['a_start']]
+            print(f'\n== {label} ==')
+            print(f'  首行 A 启动 t={ast[0]}  首行 C 启动 t={cst[0]}  '
+                  f'首行 C 完 t={cdn[0]}  （前导 {cst[0] - ast[0]} = 占 bank 1 + A 81 + B 45 - 1）')
+            print(f'  末行 C 完 t={cdn[-1]}  = {cdn[0]} + {len(cdn) - 1} × 行间隔')
+            tall = [cdn[i + 1] - cdn[i] for i in range(len(cdn) - 1)]
+            print(f'  行间隔明细: {tall}')
+            print(f'  核算: {cdn[0]} + sum(行间隔) = {cdn[0] + sum(tall)}   模型给 {cyc}  '
+                  f'{"✓" if cdn[0] + sum(tall) == cyc else "✗"}')
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--study':
+        study()
+        detail()
+    else:
+        res = {}
+        for name, fn, ref in [('ref', sim_ref, 9665), ('varA', sim_vara, 2855), ('varB', sim_varb, 1738)]:
+            out = fn()
+            cycles, seg, ok = out[0], out[1], out[2]
+            tr = out[3] if len(out) > 3 else None
+            res[name] = (cycles, seg, tr)
+            # 对的是 cycles_calc（start→done），不是 metrics.csv 的 cycles（端到端含装载）
+            print(f'{name:5s} sim={cycles:6d}  csv(calc)={ref:6d}  diff={cycles-ref:+4d}   done={ok}')
+            print('        ', {k: v for k, v in seg.items() if v})
+            if tr:
+                ast = [t for t, _ in tr['a_start']][:6]
+                cst = [t for t, _ in tr.get('c_start', [])][:6]
+                cdn = [t for t, _ in tr['c_done']]
+                print('         A start:', ast, '... C start:', cst)
+                print('         C done :', cdn[:6], '... last', cdn[-3:] if cdn else None)
         if len(cdn) > 2:
             gaps = [cdn[i+1]-cdn[i] for i in range(len(cdn)-1)]
             print('         行间隔 :', gaps)

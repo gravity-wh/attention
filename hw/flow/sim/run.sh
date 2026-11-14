@@ -67,7 +67,7 @@ RC=${PIPESTATUS[0]}
 if [ "$RC" -eq 124 ] || [ "$RC" -eq 137 ]; then
     echo "✗ 仿真超时（${SIM_TIMEOUT}s）—— DUT 大概率卡在中间状态没回到 S_IDLE。"
     echo "  看 $LOG 末尾；这类问题不会自己好，别重跑碰运气。"
-    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,-1,-1,-1,TIMEOUT" >> "$RUN/summary.csv"
+    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,-1,-1,-1,TIMEOUT,0" >> "$RUN/summary.csv"
     exit 1
 fi
 
@@ -91,12 +91,14 @@ get() { echo "$LINE" | sed -n "s/.*[ ]$1=\([^ ]*\).*/\1/p"; }
 TASKS=$(get tasks); PASS=$(get pass); FAIL=$(get fail)
 LMIN=$(get lat_min); LAVG=$(get lat_avg); LMAX=$(get lat_max)
 RMSE=$(get rmse); MAXAE=$(get maxae); MIS=$(get mism); STATUS=$(get status)
+# 方案 A：装载拍数由 tb 实测上报（老版本 tb 没有 ld= 字段，此时记 0）。
+LD=$(get ld); [ -n "$LD" ] || LD=0
 
-echo "$TAG,$VARIANT,$CAT,$TASKS,$PASS,$FAIL,$LMIN,$LAVG,$LMAX,$RMSE,$MAXAE,$MIS,$STATUS" \
+echo "$TAG,$VARIANT,$CAT,$TASKS,$PASS,$FAIL,$LMIN,$LAVG,$LMAX,$RMSE,$MAXAE,$MIS,$STATUS,$LD" \
     >> "$RUN/summary.csv"
 
-printf "[run] %-8s %-12s %s  (pass %s/%s, lat %s/%s/%s, rmse %s, max|e| %s, mism %s)\n" \
-    "$VARIANT" "$CAT" "$STATUS" "$PASS" "$TASKS" "$LMIN" "$LAVG" "$LMAX" "$RMSE" "$MAXAE" "$MIS"
+printf "[run] %-8s %-12s %s  (pass %s/%s, lat %s/%s/%s, ld %s, rmse %s, max|e| %s, mism %s)\n" \
+    "$VARIANT" "$CAT" "$STATUS" "$PASS" "$TASKS" "$LMIN" "$LAVG" "$LMAX" "$LD" "$RMSE" "$MAXAE" "$MIS"
 
 [ "$STATUS" = "PASS" ] || exit 1
 exit 0
