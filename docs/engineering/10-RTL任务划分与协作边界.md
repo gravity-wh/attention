@@ -251,16 +251,21 @@ varB-sm40-tt   varB   A=72843.9   D=17.38   E=278.495   RMSE=0.002492   PASS
 > 以后统一走 `merge_metrics.py --new <VM 的 csv> --into results/metrics.csv`，
 > 它会按 tag 覆盖、按"同方案+同周期+同 RMSE"识别重复半行，其余一律保留。
 
-### 7.4 还没解决：六行的 commit 仍是 `NOT-A-REPO`
+### 7.4 已解决：commit 列现在有主了（2026-11-12）
 
 VM 上 `/root/work/hw` 是拷贝，没有 `.git`，所以 10-30 那批运行全都绑不到提交。
 更麻烦的是 `ref-base` 的 `INFO.txt` 时间是 10:20:58，而 `ref-opt` 是 11:23——**中间隔了 63 分钟，
 恰好是两个优化提交的窗口**，所以那一行里的 sim 与 syn 未必是同一份 RTL。
 
 这件事**不能靠推算补 commit 糊过去**（老 metrics 里 sim 写 52ef889、syn 写 79066ae，
-本来就不一致）。已经做的：`manifest` 支持 `hw/.commit` 回退，VM 上已写入当前 HEAD
-（`bc17eb6`），实测新跑的 `INFO.txt` 里 `commit : bc17eb6`。要真正干净，跑一次
-`make pairall MODE=full` 即可（约 75 分钟，三条 tag：`ref-sm40-tt`/`varA-sm40-tt`/`varB-sm40-tt`）。
+本来就不一致）。做法：`manifest` 支持 `hw/.commit` 回退，VM 上写入当前 HEAD，
+再跑一次 `make pairall MODE=full` 让真数据覆盖旧行。
+
+**2026-11-12 已执行**，三方案 tt 角重跑完毕，六行 `commit` 全部是 `613ec89`；
+ss/ff 六行也同样重跑（只综合）。旧的 `ref-sm40-tt 205,294 / varA 178,376 / varB 99,096.5`
+已被 `171,005 / 149,528 / 72,843.9` 覆盖，详见 `05-SMIC40综合结果.md`。
+
+代价：full 回归比预想快得多——616 例只需 3 分钟（不是 75 分钟），整轮九次综合约 50 分钟。
 
 ### 7.5 比上面所有事都严重：优化的 RTL 从来没进过仓库
 
@@ -304,6 +309,34 @@ rtl/core/exp2_unit.sv       rtl/varA/top_varA.sv     flow/sim/unit.sh
 3. **`make table` 生成的表 3 还只是表 2 的镜像**，没有按"调整前/调整后"两列排。
    现在 `-base`/`-opt` 成对存在了，改 `make_table.py` 就能出真正的单变量对照表——
    这是 U4 的下一条待办，不是数据问题。
+
+### 7.7 重跑时新踩的两个坑（写进交接文档，别再踩一次）
+
+**坑一：VCS 会挂在向外回连上，看起来像"编译巨慢"。**
+
+```
+ps: vcs1   %CPU 0.3   TIME 00:00:02   ELAPSED 12:33
+ss: ESTAB  192.168.85.130:41658 → 198.182.50.26:80
+```
+
+`vcs1` 编译 `varA` 时向 Synopsys 的服务器（198.182.50.26:80）建了连接，
+校园网/代理环境下连上但收不到响应，进程停在 `futex_wait_queue_me`，
+**12 分钟只用掉 2 秒 CPU**。误判成"网表更大所以更慢"会白等一小时。
+
+处置：`ip route add blackhole 198.182.50.26/32`，之后连接立即失败，编译恢复正常。
+判断口诀：**看 CPU 时间，不看墙钟** —— 墙钟 12 分钟而 CPU 2 秒，一定是阻塞，不是计算。
+
+**坑二：向量必须按数值格式逐份检查，只看目录会漏。**
+
+`genvec` 的产物带格式标签：`_exp_qb16qf13.hex`（ref）与 `_exp_qb10qf7.hex`（varA/varB）是两套文件，
+清单分别是 `geninfo_<cfg>.txt`。旧 `regress.sh` 只判断 `tb/vectors/s<seed>_full/` 目录是否存在，
+于是 `pairall` 里先跑的 ref 把目录建出来之后，**varA 的六类激励全部 FAIL，报"向量打不开"**——
+看起来像 RTL 崩了，实际是流程漏判。
+
+已修：检查 `geninfo_${CFGTAG}.txt` 是否存在，并把 `build.sh` 挪到检查之后
+（先确认黄金值在，再花 1 分钟编 simv）。这条修改同时说明一件事：
+**`pairall` 这种"一条命令跑三个方案"的封装，必须自己验证每个方案的前置条件，
+不能假设"上一个方案跑通了，这个也能跑"。**
 
 ---
 

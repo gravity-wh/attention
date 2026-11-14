@@ -34,13 +34,19 @@ echo "================================================================"
 echo " 回归：variant=$VARIANT  tag=$TAG  seed=$SEED  mode=$MODE"
 echo "================================================================"
 
-bash flow/sim/build.sh "$VARIANT" "$TAG" "$CLOCK" || exit 1
-
-# 覆盖率和向量都要先就绪
-if [ ! -d "$VECDIR" ]; then
-    echo "[regress] 向量缺失，先导出（mode=$MODE）"
+# 向量必须按"数值格式"逐份检查，不能只看目录在不在。
+# exp 的黄金值文件名带格式标签：_exp_qb<QB>qf<QF>.hex，清单是 geninfo_qb<QB>qf<QF>.txt。
+# ref 用 qb16qf13、varA 用 qb10qf7、varB 用 qb10qf7 —— 同一 seed 下是两套不同文件。
+# 旧逻辑只看 $VECDIR 是否存在，于是先跑的 ref 把目录建出来之后，
+# varA 六类激励全部因 'random_0_exp_qb10qf7.hex 打不开' 而 FAIL（2026-11-12 实测踩到）。
+: "${CFGTAG:?未设置 CFGTAG —— 请用 make regress/pair 调用（值来自 config/variants.mk）}"
+if [ ! -f "$VECDIR/geninfo_${CFGTAG}.txt" ]; then
+    echo "[regress] 向量缺失（cfg=$CFGTAG），先导出（mode=$MODE）"
     bash flow/sim/genvec.sh "$SEED" "$MODE" || exit 1
 fi
+
+# 编译放在向量检查之后：先确认要用的黄金值存在，再花 5 分钟编 simv
+bash flow/sim/build.sh "$VARIANT" "$TAG" "$CLOCK" || exit 1
 
 FAILED=""
 for cat in random zero extreme cancel reset cont; do
