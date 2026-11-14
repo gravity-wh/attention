@@ -6,18 +6,19 @@
 规则三条：
 
 1. **apply 前先 `--check`**：`git apply --check <patch>`，不通过说明主干已经动过这块。
-2. **验证完就要处置**：通过 → 把补丁内容正式提交进 RTL 并删掉补丁；不通过 → 删补丁，别留着。
-3. **这里不放已合入的东西**。目录里存在的补丁 = 主干里还没有的改动。
+2. **验证完就要处置**：通过 → 把补丁内容正式提交进 RTL，补丁文件保留作评审存档并标「已合入」；
+   不通过 → 回退并删补丁，别留着。
+3. **目录里的补丁 = 一份可回退的改动记录**。状态列写清它是否已在主干里。
 
 | 补丁 | 目标文件 | 改动 | 预期 | 状态 |
 |---|---|---|---:|---|
-| `12-varB-early-release.diff` | `hw/rtl/varB/top_varB.sv` | 把 `bank_busy` 释放从 P·V 末挪到归一化末（+5/−2） | 1,738 → **1,423** 拍（−18.1%） | **已 apply，待回归** |
+| `12-varB-early-release.diff` | `hw/rtl/varB/top_varB.sv` | 把 `bank_busy` 释放从 P·V 末挪到归一化末（+5/−2） | 1,738 → **1,423** 拍（−18.1%） | **已实测通过，已合入主干** |
 
-> ⚠️ 这条补丁**已经应用到工作区的 `top_varB.sv`**，只是还没跑回归。因此
-> `git apply --check` 现在会报 `patch does not apply`——**这是预期的**，不是补丁坏了。
-> 规则 1 的前提是"主干干净"，此时正确的自检是 `git diff -- hw/rtl/varB/top_varB.sv`
-> 应当只含这 5 增 2 删。要回退就 `git checkout -- hw/rtl/varB/top_varB.sv`。
-> 回归通过后按规则 2 把 RTL 正式提交并删掉本文件；不通过则回退并删本文件。
+> ✅ **2026-11-14 实测结论**：616 例全 PASS、`mism 0`、`lat 1423`（smoke 12 例与 full 616 例一致）；
+> 三角重综合 WNS 全 ≥ 0（最差 +0.001 ns），面积/功耗变化在 ±0.9% 内。
+> 因此这条补丁**已经写进 `hw/rtl/varB/top_varB.sv`**，现在再 `git apply` 会报
+> `patch does not apply`——那是正常的。要回退就用 `git apply --reverse <patch>`。
+> 实测账见 `../05-SMIC40综合结果.md` §3.3 与 `../12-P2-工作包.md` §3.4。
 
 ## 12-varB-early-release.diff
 
@@ -32,21 +33,27 @@
 
 **为什么不是加第 3 个 bank**：同样是 1,423，白花 16×32 FF。
 
-**验证**（详见 `../12-P2-工作包.md` §3.3）。注意补丁已 apply，**跳过前两步**，直接回归：
+**验证结果**（2026-11-14，CentOS 7.9 VM，VCS V-2023.12-SP2，seed 20260101）：
+
+| 项 | 结果 |
+|---|---|
+| smoke（12 例） | 六类全 PASS，`lat 1423` |
+| full（616 例） | 六类全 PASS，`mism 0`，`lat_min = lat_avg = lat_max = 1423` |
+| cancel 类 | `lat 1375 / 1399 / 1423`（跳过零组变快，原有特性，不是回归） |
+| 精度 | worst RMSE 0.002492、max\|e\| 0.006034 —— 与原实现逐字段相同 |
+| 三角综合 | WNS 0 / 0 / +0.001；面积 73,296.9 / 83,004.8 / 67,074.6 µm²；功耗 16.096 / 14.806 / 18.463 mW |
+
+复跑命令（补丁已在主干里，不需要再 apply）：
 
 ```bash
-git diff --stat -- hw/rtl/varB/top_varB.sv      # 应只有 +5/−2；不是就先看是不是已被别处改动
 cd hw
 make regress VARIANT=varB TAG=varB-early MODE=full
 awk -F, 'NR>1{print $3, $7, $8, $9, $12, $13}' runs/varB-early/summary.csv
 ```
 
 判据：`lat_min == 1423` 且 `mismatch == 0`。拍数对而 mismatch 不为 0 → 立刻回退。
-**2026-11-14 22:30 起仍在待验**：本机只有 iverilog 11（不支持 tb 里的 covergroup/class），
-VCS 与 vsim license 均不可用，`hw/runs/` 里没有任何 `varB-early` 结果。
-这一步只能在装了 VCS 的虚拟机上做。
 
-**撤销**：`git apply --reverse <patch>` 或 `git checkout -- hw/rtl/varB/top_varB.sv`。
+**撤销**：`git apply --reverse <patch>` 或 `git checkout <commit> -- hw/rtl/varB/top_varB.sv`。
 
 **预测来源**：`python hw/flow/collect/cycle_model.py --study`
 （模型对现实现给 1,738、ref 9,665、varA 2,855，三者与 `metrics.csv` diff 均为 0，

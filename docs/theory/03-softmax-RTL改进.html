@@ -379,7 +379,7 @@
         <text x="40" y="204" font-size="11.5" fill="#5F5E5A">差的那 64 拍 = C 级的 P·V 段，它只用 pu_row / nzrow_r，不碰 erow</text>
       </g>
     </svg>
-    <figcaption>把 bank 释放从「P·V 结束」提前到「归一化结束」，占用从 206 降到 142，两个 bank 终于喂得饱 A 级（逐拍模型：1 738 → 1 423）。</figcaption>
+    <figcaption>把 bank 释放从「P·V 结束」提前到「归一化结束」，占用从 206 降到 142，两个 bank 终于喂得饱 A 级（逐拍模型 1 738 → 1 423；2026-11-14 VCS 实测 616 例 mism=0 确认）。</figcaption>
   </figure>
 
   <p>改动本身只有四行——把释放挪出 P·V 分支：</p>
@@ -406,7 +406,7 @@
   </div>
 
   <p>
-    收益：<b>1 738 → 1 423 拍（−18.1%）</b>，零面积成本；对 ref 的加速比由 5.56× 提到 6.79×。
+    收益：<b>1 738 → 1 423 拍（−18.1%，2026-11-14 已实测）</b>，面积代价 +0.62%（tt，映射噪声级）、零新增寄存器；对 ref 的加速比（端到端含装载口径）由 4.16× 提到 <b>4.76×</b>，纯计算口径下 5.56× → 6.79×。
   </p>
 </section>
 
@@ -561,7 +561,7 @@
     <tbody>
       <tr><td class="n">1</td><td>三级流水（A/B/C）</td><td class="n up">91 → 45.5 拍/行</td><td>+272 FF</td><td>已做（varA）</td></tr>
       <tr><td class="n">2</td><td>行融合（删 sm/pu）</td><td class="n up">−11 744 FF，−45 914 µm² mux</td><td>0</td><td>已做（varB）</td></tr>
-      <tr><td class="n">3</td><td>bank 释放提前</td><td class="n up">1 738 → 1 423 拍（−18.1%）</td><td>4 行代码</td><td><b>立刻做</b></td></tr>
+      <tr><td class="n">3</td><td>bank 释放提前</td><td class="n up">1 738 → 1 423 拍（−18.1%）</td><td>2 行搬位置</td><td><b>已做（11-14）</b></td></tr>
       <tr><td class="n">4</td><td>exp2 切一级流水</td><td class="n up">Fmax +15%</td><td>1 个寄存器 + 重跑</td><td>要做（只 varA/B）</td></tr>
       <tr><td class="n">5</td><td>2 个除法器交错</td><td class="n down">≈ 0</td><td>+1 recip_unit</td><td>不做</td></tr>
       <tr><td class="n">6</td><td>4 路并行 exp</td><td class="n down">≈ 0</td><td>EXP2 面积 ×4</td><td>不做</td></tr>
