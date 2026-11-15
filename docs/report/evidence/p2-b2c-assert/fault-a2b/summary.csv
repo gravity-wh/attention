@@ -1,0 +1,2 @@
+tag,variant,cat,tasks,pass,fail,lat_min,lat_avg,lat_max,worst_rmse,worst_maxae,mismatch,status
+inject-a2b,varB,random,2,0,2,-1,-1,-1,0,0,0,FAIL,0

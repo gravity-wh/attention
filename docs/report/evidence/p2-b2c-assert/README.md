@@ -88,7 +88,8 @@ inject-b2c2,varB,random,2,0,2,-1,-1,-1,0,0,0,FAIL,0
 证据文件：
 
 - `fault/summary.csv`：`FAIL` 行；
-- `fault/assert_random.log`：2620 条断言原文；
+- `fault/assert_random.log`：2620 条断言原文，其中 30 条是 `B would overwrite pending b2c_v`，同时覆盖了第二条断言；
+- `fault-a2b/summary.csv`、`fault-a2b/assert_random.log`：另一组受控注入，把 B 级 `a2b_v <= 1'b0` 改成 `1'b1`，产生 4394 条 `[VARB-A2B]`，摘要 `FAIL`，`run.sh` 退出 1；
 - `SHA256SUMS`：本目录文件哈希。
 
 ## 3. 代码改动
