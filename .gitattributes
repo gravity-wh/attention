@@ -43,3 +43,5 @@ hw/tb/vectors/**/geninfo_*.txt   text eol=lf
 
 # 证据包必须逐字节可校验：禁止换行符转换，否则 SHA256SUMS 在 clone 后会失效。
 docs/report/evidence/** -text
+# 证据日志保留 VCS 原始尾随空格，不参与 whitespace 检查。
+docs/report/evidence/** -whitespace
