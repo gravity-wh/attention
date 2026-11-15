@@ -1,0 +1,11 @@
+--- a/hw/rtl/varB/top_varB.sv
++++ b/hw/rtl/varB/top_varB.sv
+@@ -354,7 +354,7 @@
+             c_bank  <= b2c_b;
+             c_rval  <= b2c_r;
+             c_j     <= 4'd0;
+-            b2c_v   <= 1'b0;
++            b2c_v   <= 1'b1;
+           end
+         end else if (c_ph == 1'b0) begin
+           pu_row[c_j]      <= p_sat;

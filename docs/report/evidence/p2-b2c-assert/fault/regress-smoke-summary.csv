@@ -1,0 +1,7 @@
+tag,variant,cat,tasks,pass,fail,lat_min,lat_avg,lat_max,worst_rmse,worst_maxae,mismatch,status
+inject-b2c-regress,varB,random,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0
+inject-b2c-regress,varB,zero,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0
+inject-b2c-regress,varB,extreme,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0
+inject-b2c-regress,varB,cancel,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0
+inject-b2c-regress,varB,reset,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0
+inject-b2c-regress,varB,cont,2,0,2,-1,-1,-1,-1,-1,-1,FAIL,0

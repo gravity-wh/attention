@@ -74,7 +74,9 @@ if [ -n "$ASSERT_HITS" ]; then
     printf '%s\n' "$ASSERT_HITS" > "$RUN/assert_$CAT.log"
     printf '%s\n' "$ASSERT_HITS" | head -5
     echo "✗ DUT 握手断言触发（$ASSERT_COUNT 条）—— 这不是普通 log，判 FAIL"
-    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,0,0,0,FAIL,0" >> "$RUN/summary.csv"
+    # 数值字段用 -1 表示“未采集”，不要写成 0：a2b 故障会真实产生 mismatch，
+    # 写成 0 会被误读为实测零误差。
+    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,-1,-1,-1,FAIL,0" >> "$RUN/summary.csv"
     exit 1
 fi
 
