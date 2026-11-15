@@ -50,7 +50,7 @@ git archive --format=tar -o source-783149f.tar 783149f -- \
   hw/rtl hw/flow/sim hw/flow/collect/cycle_model.py hw/tb hw/model hw/config
 ```
 
-生成的受控源码集；`SOURCE_SHA256SUMS` 是展开后 105 个文件的哈希清单。
+生成的受控源码集；`SOURCE_SHA256SUMS` 是展开后 104 个文件的哈希清单。
 
 校验：
 
