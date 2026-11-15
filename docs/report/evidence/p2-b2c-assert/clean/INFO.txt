@@ -1,0 +1,14 @@
+variant  : varB
+desc     : 方案B：行融合（不存 S/P 全矩阵）+ 4 lane 并行（与 varA 同 lane 数，单变量对照）
+top      : top_varB
+tag      : p2-b2c-assert-final
+seed     : 20260101
+clock    : 100 MHz
+pvt      : TT_25C_1V10
+pdk      : SC9MC
+sim      : vcs
+syn      : genus
+commit   : 783149f
+dirty    : 0 个文件未提交
+host     : localhost.localdomain
+time     : 2026-11-16T05:38:19+0800
