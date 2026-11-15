@@ -368,6 +368,7 @@ def sim_varb(nb=2, early_release=False):
     a2b_v = False
     a2b_b = 0
     b_busy = False
+    b_bank = 0
     b2c_v = False
     b2c_b = 0
     c_busy = False
@@ -394,6 +395,7 @@ def sim_varb(nb=2, early_release=False):
         n_a2b_v = a2b_v
         n_a2b_b = a2b_b
         n_b_busy = b_busy
+        n_b_bank = b_bank
         n_b2c_v = False
         n_b2c_b = b2c_b
         n_c_busy = c_busy
@@ -442,11 +444,12 @@ def sim_varb(nb=2, early_release=False):
                 if a2b_v:
                     n_b_busy = True
                     n_a2b_v = False
+                    n_b_bank = a2b_b
                     n_div_start = True
             elif r_done_seen:
                 n_b_busy = False
                 n_b2c_v = True
-                n_b2c_b = a2b_b
+                n_b2c_b = b_bank
             # C
             if not c_busy:
                 if b2c_v:
@@ -527,6 +530,7 @@ def sim_varb(nb=2, early_release=False):
         a2b_v = n_a2b_v
         a2b_b = n_a2b_b
         b_busy = n_b_busy
+        b_bank = n_b_bank
         b2c_v = n_b2c_v
         b2c_b = n_b2c_b
         c_busy = n_c_busy

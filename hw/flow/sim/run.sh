@@ -64,6 +64,20 @@ timeout -k 10 "$SIM_TIMEOUT" "$SIMV" \
     -l "$LOG" 2>&1 | tee "$LOG.stdout" | grep -vE '^$'
 RC=${PIPESTATUS[0]}
 
+# ---- DUT 握手断言：必须在这里判失败，不能只让 $error 打印 ----
+# tb 的 status 只看 n_task_fail；$error 不会自动改 status。若不在这里拦截，
+# 会出现“日志有 [VARB-B2C]、SUMMARY 仍 PASS、regress 退出 0”的假绿。
+# 只匹配明确命名的 DUT 断言，避免把普通日志误判成失败。
+ASSERT_HITS=$(grep -E '\[VARB-(B2C|A2B)\]' "$LOG" 2>/dev/null || true)
+if [ -n "$ASSERT_HITS" ]; then
+    ASSERT_COUNT=$(printf '%s\n' "$ASSERT_HITS" | wc -l | tr -d ' ')
+    printf '%s\n' "$ASSERT_HITS" > "$RUN/assert_$CAT.log"
+    printf '%s\n' "$ASSERT_HITS" | head -5
+    echo "✗ DUT 握手断言触发（$ASSERT_COUNT 条）—— 这不是普通 log，判 FAIL"
+    echo "$TAG,$VARIANT,$CAT,$N,0,$N,-1,-1,-1,0,0,0,FAIL,0" >> "$RUN/summary.csv"
+    exit 1
+fi
+
 if [ "$RC" -eq 124 ] || [ "$RC" -eq 137 ]; then
     echo "✗ 仿真超时（${SIM_TIMEOUT}s）—— DUT 大概率卡在中间状态没回到 S_IDLE。"
     echo "  看 $LOG 末尾；这类问题不会自己好，别重跑碰运气。"
