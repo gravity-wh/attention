@@ -101,6 +101,8 @@ module top_varB `ATTN_TOP_PORTS;
   logic [24:0] b2c_r;
   logic [4:0]  b2c_row;
   logic [1:0]  b2c_b;
+  logic        b_done_pending;   // B 级算完、但 C 级还没取走（1 深 FIFO 的反压）
+  logic [24:0] b_r_lat;          // 反压期间锁存的倒数结果
 
   // ---------------------------------------------------------------- C 级
   logic        c_busy;
@@ -238,6 +240,7 @@ module top_varB `ATTN_TOP_PORTS;
       a2b_v     <= 1'b0; a2b_t <= 21'd0; a2b_r <= 5'd0; a2b_b <= 2'd0;
       b_busy    <= 1'b0; b_row <= 5'd0; b_bank <= 2'd0; b_tsum_latch <= 21'd0;
       b2c_v     <= 1'b0; b2c_r <= 25'd0; b2c_row <= 5'd0; b2c_b <= 2'd0;
+      b_done_pending <= 1'b0; b_r_lat <= 25'd0;
       c_busy    <= 1'b0; c_ph <= 1'b0; c_row <= 5'd0; c_j <= 4'd0;
       c_bank    <= 2'd0; c_rval <= 25'd0; c_acc <= 64'sd0;
       pv_first  <= 1'b1; pv_done <= 2'd0;
@@ -311,12 +314,18 @@ module top_varB `ATTN_TOP_PORTS;
             div_start    <= 1'b1;
             a2b_v        <= 1'b0;
           end
+        end else if (b_done_pending) begin
+          if (!b2c_v) begin
+            b_busy         <= 1'b0;
+            b_done_pending <= 1'b0;
+            b2c_v          <= 1'b1;
+            b2c_r          <= b_r_lat;
+            b2c_row        <= b_row;
+            b2c_b          <= b_bank;
+          end
         end else if (rcp_done) begin
-          b_busy  <= 1'b0;
-          b2c_v   <= 1'b1;
-          b2c_r   <= r_out;
-          b2c_row <= b_row;
-          b2c_b   <= b_bank;
+          b_r_lat        <= r_out;
+          b_done_pending <= 1'b1;
         end
 
         // ---- C 级：归一 → P·V ----
@@ -339,6 +348,8 @@ module top_varB `ATTN_TOP_PORTS;
             c_acc    <= 64'sd0;
             pv_first <= 1'b1;
             pv_done  <= 2'd0;
+            if (c_bank == 2'd0) bank_busy[0] <= 1'b0;
+            else                bank_busy[1] <= 1'b0;
           end else begin
             c_j <= c_j + 4'd1;
           end
@@ -361,8 +372,6 @@ module top_varB `ATTN_TOP_PORTS;
               // 最后一个元素在 c 级就送出了，done 必须与它同拍：tb 靠 done 记
               // 时延，而且收到 256 个就退出循环，done 晚一拍就再也记不到。
               if (c_row == N-1) done <= 1'b1;
-              if (c_bank == 2'd0) bank_busy[0] <= 1'b0;
-              else                bank_busy[1] <= 1'b0;
             end else begin
               c_j <= c_j + 4'd1;
             end
