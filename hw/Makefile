@@ -217,11 +217,19 @@ pdkcheck:
 	@echo "  驱动单元 : $(SYN_DRIVE_CELL)   负载: $(SYN_LOAD_PF) pF"
 	@echo "  不确定度 : $(SYN_CLK_UNCERT_PCT)% 周期   I/O 延迟: $(SYN_IO_DELAY_PCT)% 周期"
 	@test -n "$(SYN_LIB)" || { echo "✗ SYN_LIB 为空 —— config/pdk.mk 里没有 lib_$(CORNER)_$(PDK)"; exit 1; }
-	@test -n "$(SYN_LEF)" || { echo "✗ SYN_LEF 为空 —— config/pdk.mk 里没有 lef_$(PDK)"; exit 1; }
+	@if [ "$(SYN_PHYS)" = "1" ]; then \
+	  test -n "$(SYN_LEF)" || { echo "✗ SYN_LEF 为空 —— phys=1 时面积只能来自 LEF"; exit 1; }; \
+	else \
+	  echo "  （SYN_PHYS=0：面积取自 .lib，LEF 不参与综合）"; \
+	fi
 	@echo "== 文件核对（VM 上应全部 ✓）=="
-	@for f in "$(lib_tt_$(PDK))" "$(lib_ss_$(PDK))" "$(lib_ff_$(PDK))" "$(SYN_LEF)"; do \
+	@for f in "$(lib_tt_$(PDK))" "$(lib_ss_$(PDK))" "$(lib_ff_$(PDK))"; do \
 	  if [ -f "$$f" ]; then echo "  ✓ $$f"; else echo "  ⚠ 缺失 $$f"; fi; \
 	done
+	@if [ "$(SYN_PHYS)" = "1" ]; then \
+	  if [ -f "$(SYN_LEF)" ]; then echo "  ✓ $(SYN_LEF)"; else echo "  ⚠ 缺失 $(SYN_LEF)"; fi; \
+	elif [ -f "$(SYN_LEF)" ]; then echo "  · $(SYN_LEF)（phys=0，不参与综合）"; \
+	else echo "  · 无 LEF 文件（phys=0，面积全部来自 .lib，属正常）"; fi
 	@if [ -n "$(qrc_tt_$(PDK))" ]; then \
 	  for f in "$(qrc_tt_$(PDK))" "$(qrc_ss_$(PDK))" "$(qrc_ff_$(PDK))"; do \
 	    if [ -f "$$f" ]; then echo "  ✓ $$f"; else echo "  ⚠ 缺失 $$f"; fi; done; \

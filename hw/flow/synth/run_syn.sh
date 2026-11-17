@@ -35,7 +35,12 @@ command -v genus >/dev/null || die "找不到 genus（综合在 VM 上跑：用 
 [ -n "${SYN_LEF:-}" ] || die "SYN_LEF 未设置 —— 检查 config/pdk.mk 的 include"
 [ -f "$SYN_LIB" ] || die "时序库不存在: $SYN_LIB
      VM 上的路径才对；在 Windows 侧跑必然找不到。用 runvm.sh 执行。"
-[ -f "$SYN_LEF" ] || die "LEF 不存在: $SYN_LEF（GPDK045 这类库靠 LEF 补面积；SMIC40LL 虽不 read_physical，LEF 仍应随库交付，缺失即异常）"
+# LEF 只在 phys=1（面积必须从 LEF 的 SIZE 取）时才是硬依赖。
+# phys=0 的库（SMIC40LL）面积全部来自 .lib，LEF 不参与综合，
+# 此时把 LEF 当必需项会让"只交付 .lib 的工艺库"无法跑通。
+if [ "${SYN_PHYS:-1}" = "1" ]; then
+    [ -f "$SYN_LEF" ] || die "LEF 不存在: $SYN_LEF（phys=1 时面积只能来自 LEF 的 SIZE）"
+fi
 [ -n "${TOP:-}" ] || die "TOP 未设置"
 [ -f "${FLIST:?}" ] || die "filelist 不存在: $FLIST"
 case "$CLK_MHZ" in ''|*[!0-9.]*) die "CLOCK 不是数字: $CLK_MHZ";; esac
