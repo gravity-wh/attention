@@ -1,0 +1,4 @@
+    Hinst Name       Module Name          Inst Count           Total Area
+----------------------------------------------------------------------
+top_varB                                       27797            75162.024
+  u_quant            fp16_quant                  280              272.677

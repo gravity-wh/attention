@@ -22,6 +22,7 @@ bash experiments/p4/regress-verilator.sh varB varB-fold-l2e
 ~~~bash
 make pdkcheck PDK=SC9MC CORNER=tt
 make syn VARIANT=ref TAG=ref-sm40-tt-p4 PDK=SC9MC CORNER=tt SYN_CPUS=4
+make syn VARIANT=varA TAG=varA-sm40-tt-p4 PDK=SC9MC CORNER=tt SYN_CPUS=4
 make syn VARIANT=varB TAG=varB-sm40-tt-p4 PDK=SC9MC CORNER=tt SYN_CPUS=4
 
 patch -p1 < experiments/p4/innovus25.patch
@@ -32,7 +33,14 @@ PNR_CPUS=2 make pnr VARIANT=varB TAG=varB-sm40-tt-p4 PDK=SC9MC CORNER=tt
 PNR_CPUS=2 make pnr VARIANT=ref TAG=ref-sm40-tt-p4 PDK=SC9MC CORNER=tt
 ~~~
 
-派生脚本沿用 gen_techlef.sh 的矩形方法，从各层默认 VIARULE 生成显式过孔。两个设计共用生成后的 tech LEF，工艺库原件由 PDK 环境提供。
+Genus 从 TT Liberty 取得面积和延时。晚释放与折叠候选沿用前一节的独立副本，以 `VARIANT=varB` 和独立 TAG 运行同一综合命令。派生脚本沿用 gen_techlef.sh 的矩形方法，从各层默认 VIARULE 生成显式过孔。两个设计共用生成后的 tech LEF。扫描触发器用作功能单元，布局不执行 DFT 扫描排序。
+
+保留 CTS 检查点后，可以在同一 TAG 下用单线程恢复布线。恢复路径沿用完整流程的布线、提取和检查命令。
+
+~~~bash
+P4_RESUME_CTS=1 PNR_CPUS=1 make pnr VARIANT=varB TAG=varB-sm40-tt-p4 PDK=SC9MC CORNER=tt
+P4_RESUME_CTS=1 PNR_CPUS=1 make pnr VARIANT=ref TAG=ref-sm40-tt-p4 PDK=SC9MC CORNER=tt
+~~~
 
 ## 活动功耗和固定网表扫频
 
@@ -53,3 +61,10 @@ python3 experiments/p4/collect-power.py runs/p4-power runs/p4-power/summary.csv
 ~~~
 
 将方案改为 varB 或 varA 时，使用它们的网表和 qb10qf7 黄金值。扫频对 ref 和 varB 复用各自的 100 MHz 映射网表，重设各频点的时钟周期、I/O 延迟和不确定性，并重放相同 random_0。每个频点先报布局前 setup WNS，再用门级 VCD 反标计算动态与泄漏功耗。报告中的能耗等于任务窗口平均总功率乘以时长。零延迟仿真未计入 SDF 毛刺活动，布局前计时未计入布线寄生。
+
+对照版和折叠版仿真使用 `top_varB`，分别读取各自的黄金向量。反标命令可设置 `P4_POWER_TOP=top_varB` 后使用独立方案名。四个频点齐全后，可从同一汇总生成扫频图。
+
+~~~bash
+python3 experiments/p4/plot-sweep.py runs/p4-power/summary.csv \
+    ../docs/report/slides/figures/p4-frequency-sweep.png
+~~~

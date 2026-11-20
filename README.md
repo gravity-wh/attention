@@ -57,6 +57,8 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -Name ic_slides   # → del
 
 ## 状态
 
+P4 的 SMIC 40LL 实验见 [结果和原始报告](hw/results/p4-sm40-20261120)、[复现步骤](hw/experiments/p4) 与 [设计报告](docs/report/design-report.md)。
+
 - [x] `model/` float64 参考 + 六类测试向量
 - [x] `model/` bit-accurate 模型（含数值契约、单元自检、误差基线、位宽扫描）
 - [x] `rtl/common/` 统一端口契约与包（16×16 规模、Q1{16,13} 数值格式）

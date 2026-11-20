@@ -204,7 +204,7 @@
 -exit
 --- /dev/null
 +++ b/flow/pnr/pnr_implementation.tcl
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,106 @@
 +# =====================================================================
 +#  flow/pnr/pnr.tcl —— Innovus 全流程（floorplan -> place -> CTS -> route）
 +#
@@ -233,6 +233,17 @@
 +
 +file mkdir $outdir
 +
++if {[info exists ::env(P4_RESUME_CTS)] && $::env(P4_RESUME_CTS) eq "1"} {
++    step "4. Restore CTS checkpoint"
++    source [file join $outdir after_cts.enc]
++    setMultiCpuUsage -localCpu [env PNR_CPUS]
++    setDesignMode -process 40
++    setNanoRouteMode -routeBottomRoutingLayer 2
++    setNanoRouteMode -routeTopRoutingLayer 6
++    setNanoRouteMode -drouteEndIteration 8
++    source flow/pnr/pnr_postcts.tcl
++}
++
 +step "0. 初始化（tech LEF 必须在单元 LEF 前面）"
 +set init_lef_file [list $tech_lef $cell_lef]
 +set init_verilog  $netlist
@@ -256,6 +267,7 @@
 +
 +setDesignMode -process 40
 +setNanoRouteMode -routeBottomRoutingLayer 2
++setNanoRouteMode -routeTopRoutingLayer 6
 +setNanoRouteMode -drouteEndIteration 8
 +
 +step "1. 电源网络"
@@ -298,6 +310,10 @@
 +# 不用重做 place/CTS（单次 CTS 在本机约 40 分钟）。
 +saveDesign $outdir/after_cts.enc
 +
++source flow/pnr/pnr_postcts.tcl
+--- /dev/null
++++ b/flow/pnr/pnr_postcts.tcl
+@@ -0,0 +1,32 @@
 +step "5. Route"
 +routeDesign
 +puts "\[pnr\] 布线完成"

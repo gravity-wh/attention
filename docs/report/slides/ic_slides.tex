@@ -132,7 +132,7 @@
   \column{.322\textwidth}
   \scriptsize
   \textbf{数字只从 P4 出}\; 每个数都要能顺 TAG 追回 \texttt{runs/}；
-  $D$ 含不含装载由 P4 定一次。
+  $D$ 从开始装载计到最后一个结果输出。
 \end{columns}
 \end{frame}
 
@@ -447,23 +447,22 @@ $R=\mathrm{round}(2^{40}/T)$ 每行只做一次，再 $p_i=(e_i\cdot R+2^{23})\g
   所以提高并行度没有牺牲频率——它提高的是「每拍处理几个元素」，不是「每拍逻辑多深」。
   \column{.52\textwidth}
   \scriptsize
-  \begin{block}{\textbf{\scriptsize 改表示，而不是改电路}}
-    $k'=\mathrm{RNE}(k\cdot\log_2 e\cdot2^{Q_F})$，则 $S'=QK'^{\top}/4=\log_2 e\cdot S$，
-    而 $d'$ 本身就是 $t$。乘树与紧跟的 RNE 对齐\textbf{整段消失}，LUT／插值／倒数／$P\cdot V$ 一行不动。
+  \begin{block}{\textbf{\scriptsize 在装载阶段换底}}
+    $k_q=\mathrm{RNE}(k\cdot2^{Q_F})$，$k'=\mathrm{RNE}(k_q\cdot94548/65536)$。
+    指数单元直接接收换底后的差值。常数乘移到 K 装载路径，查表和归一化保持原有计算。
   \end{block}
   \vspace{-0.5mm}
   \fitbox{%
   \begin{tabular}{@{}ll@{}}
-    预估 & 9.4\,ns $\to$ 6.3\textasciitilde6.8\,ns（Fmax $+40\%$）\\
-    代价 & $k'$ 幅度 $\times1.4427$，$\pm4\to\pm2.77$\\
-    代价 & 量化器多一个 $12\times17$ 常数乘（$+0.3$\,k）\\
-    状态 & 模型自验通过、RTL 已改，\textbf{待 VCS 回归}\\
+    回归 & 616 例全过，逐位失配 0\\
+    精度 & 最大 RMSE 0.003656，最大绝对误差 0.008309\\
+    周期 & 最坏完整任务 2\,191 拍\\
   \end{tabular}}
 \end{columns}
 \vspace{1.5mm}
 \parbox{0.95\textwidth}{\scriptsize\raggedright
-  这是一次\textbf{改表示而不是改电路}的操作：周期一拍不变，模型改一行、向量重生成，
-  收益却同时落在面积、功耗和时序三处。}
+  TT 100 MHz 下综合面积下降 1.27\%，布局前 setup WNS 增加 0.137 ns，
+  随机任务能耗下降 0.22\%。最终沿用原版 varB 的精度。}
 \end{frame}
 
 \begin{frame}[t]
@@ -687,7 +686,7 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
   \column{.53\textwidth}
   \scriptsize
   \textbf{单元级穷举}：RNE 宏与原函数对拍 \textbf{400\,120 组}（含 5 万组满 64 位随机、一半负数），
-  不一致 0 组。系统级六类只跑 12 个任务，碰不到这些角，单元穷举是必要补充。
+  不一致 0 组。系统级全量覆盖 616 个任务，另设 12 项冒烟集用于快速检查。
   \vspace{1mm}
 
   {\tiny 覆盖率的证据链是六类回归表＋逐类日志，不是行覆盖率百分比——本机 license 不含 URG 特性，
@@ -699,123 +698,86 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
 \section[结果]{结果与效率}
 
 \begin{frame}[t]
-\frametitle{\textbf{综合结果（SMIC 40LL · 100 MHz）}}
+\frametitle{\textbf{Table 2：综合与任务窗口功耗}}
 \footnotesize
 \begin{center}
 \fitbox{%
-\begin{tabular}{lccccccc}
+\begin{tabular}{lrrr}
   \toprule
-  方案 & 面积 $A$ ($\mu$m$^2$) & 单元 & 触发器 & 周期数 & $D$ ($\mu$s) & $P$ (mW) & $E$ (nJ) \\
+  TT，100 MHz，\texttt{random\_0} & ref & varA & varB \\
   \midrule
-  ref  & 171\,005 & 57\,690 & 25\,357 & 10\,433 & 104.33 & 40.55 & 4\,230.2 \\
-  varA & 149\,528 & 52\,180 & 21\,384 & 3\,623  & 36.23  & 39.14 & 1\,418.1 \\
-  varB & \textbf{73\,297} & \textbf{27\,069} & \textbf{9\,411} & \textbf{2\,191} & \textbf{21.91} & \textbf{16.10} & \textbf{352.7} \\
+  综合面积（$\mu$m$^2$） & 160\,620.0 & 140\,768.0 & 67\,960.6 \\
+  完整任务周期 & 10\,433 & 3\,623 & 2\,191 \\
+  完整任务时延（$\mu$s） & 104.33 & 36.23 & 21.91 \\
+  动态功率（mW） & 14.00769 & 11.87046 & 5.59505 \\
+  泄漏功率（mW） & 0.01235 & 0.01114 & 0.00564 \\
+  总功率（mW） & 14.02004 & 11.88160 & 5.60069 \\
+  单任务能耗（nJ） & 1\,462.710 & 430.470 & 122.711 \\
+  综合 setup WNS（ns） & +0.001 & 0.000 & 0.000 \\
   \bottomrule
 \end{tabular}}
 \end{center}
-\vspace{1mm}
-\begin{columns}[t,onlytextwidth]
-  \column{.45\textwidth}
+\begin{block}{测量条件}
   \scriptsize
-  \textbf{三个工艺角都收敛}
-  \begin{center}
-  \begin{tabular}{lccc}
-    \toprule
-    方案 & tt & ss & ff \\
-    \midrule
-    ref  & 171.0 & 182.7 & 159.7 \\
-    varA & 149.5 & 162.6 & 138.9 \\
-    varB & 73.3  & 83.0  & 67.1 \\
-    \bottomrule
-  \end{tabular}
-  \end{center}
-  {\tiny 面积单位 k$\mu$m$^2$；九次综合 WNS 全部 $\ge0$（最差 $+0.005$\,ns）。}
-  \column{.52\textwidth}
-  \scriptsize
-  \textbf{口径必须带上}（每题都会被追问）
-  \begin{itemize}
-    \item 面积是\textbf{纯标准单元面积}：不含布线、时钟树、IO；未用 SRAM 宏，两种面积口径下数字相同；
-    \item 功耗是\textbf{固定活动率下的静态估计}，不是 VCD 反标仿真；
-    \item $D$ 端到端含 768 拍装载，$E=P\times D$ 量纲正好是 nJ。
-  \end{itemize}
-\end{columns}
-\end{frame}
-
-\begin{frame}[t]
-\frametitle{\textbf{相对改善：面积 2.3 倍，能耗 12 倍}}
-\footnotesize
-\begin{center}
-\fitbox{%
-\begin{tabular}{lcccc}
-  \toprule
-  方案 & 相对面积 $A_0/A$ & 相对时延 $D_0/D$ & 相对能耗 $E_0/E$ & 综合效率 $J$ \\
-  \midrule
-  ref  & 1.00 & 1.00 & 1.00 & 1.00 \\
-  varA & 1.14 & 2.88 & 2.98 & 2.14 \\
-  varB & \textbf{2.33} & \textbf{4.76} & \textbf{11.99} & \textbf{5.10} \\
-  \bottomrule
-\end{tabular}}
-\end{center}
-\vspace{1mm}
-\begin{columns}[t,onlytextwidth]
-  \column{.50\textwidth}
-  \scriptsize
-  \textbf{为什么面积只差 2 倍、能耗差 12 倍}
-
-  面积只反映「\textbf{同时存在多少硬件}」，不反映「\textbf{用了多少个周期}」。
-  varB 同时赢在功耗（$2.53\times$）与周期数（$4.76\times$）上，两个因子相乘才有 12 倍。
-  \vspace{1mm}
-
-  所以「varB 省一半面积」是\textbf{低估}，「省一个数量级的能量」才是它的卖点。
-  \column{.47\textwidth}
-  \scriptsize
-  \textbf{varA 只小胜，不能说成「接近一半」}
-
-  $A_0/A=1.14$：三个角上 varA 面积都是 ref 的 0.87\textasciitilde0.89，同一量级。
-  它的价值不在面积，而在\textbf{周期数 2.88 倍}——用 14\% 的面积换 2.9 倍的吞吐。
-  \vspace{1mm}
-
-  {\tiny $J$ 本报告定义为三项改善的几何平均（题面未给公式），仅为把三个维度压成一个数。}
-\end{columns}
-\end{frame}
-
-\begin{frame}[t]
-\frametitle{\textbf{对照实验：哪一条归因是干净的}}
-\footnotesize
-\begin{center}
-\fitbox{%
-\begin{tabular}{lcccc c}
-  \toprule
-  对照 & 改变的变量 & $A$ & $D$ & $E$ & 归因 \\
-  \midrule
-  ref $\to$ varA & 位宽 $+$ 并行度 $+$ 调度 & 1.14 & 2.88 & 2.98 & 不能 \\
-  varA $\to$ varB & \textbf{只改存储策略} & 2.04 & 1.65 & 4.02 & \textbf{能} \\
-  位宽单扫 & 16 $\to$ 12 $\to$ 10 $\to$ 8 bit & \multicolumn{3}{c}{面积 100／56／39／25\,\%} & \textbf{能} \\
-  \bottomrule
-\end{tabular}}
-\end{center}
-\vspace{1mm}
-\begin{block}{\textbf{\scriptsize 把最容易出错的那条说清楚}}
-  \scriptsize
-  ref$\to$varA 同时改了\textbf{三个}变量，所以 1.14 倍不能归给并行度：那 4\,608 个触发器\textbf{全部来自位宽}，
-  并行化本身反而净增了 528 个（双缓冲＋掩码）。正确说法是
-  \textbf{varA 的价值在时间（2.88 倍），面积那 1.14 倍是位宽送的}。
-  这句写反，答辩会被一句「你怎么知道不是位宽带来的」问倒。
+  SMIC 40LL RVT，TT 1.10 V／25 $^\circ$C，Genus 25.12 综合。
+  Innovus 反标零延迟门级 VCD，范围覆盖 768 拍装载至最后一个输出。
+  相同样本下反标覆盖率为 99.67\%／98.58\%／98.95\%。
 \end{block}
-\vspace{0.5mm}
-\begin{columns}[t,onlytextwidth]
-  \column{.49\textwidth}
-  \scriptsize
-  \textbf{varA$\to$varB 的收益拆两半}：触发器 $21\,384\to9\,411$（$-11\,973$ 个），
-  读多路器 $256:1\to16:1$。后者面积和触发器本身相当，最容易被漏掉。
-  \column{.48\textwidth}
-  \scriptsize
-  \textbf{单变量对照用的是 varA／varB 这一对}，可直接引用表 2 结果——正是题面「若 A、B 已构成单变量对照，可直接引用」那一条。
-\end{columns}
 \end{frame}
 
 \begin{frame}[t]
-\frametitle{\textbf{面积解剖：62\,\% 是触发器，不是乘法器}}
+\frametitle{\textbf{varB 的完整任务用时缩短至 21.91 $\mu$s}}
+\footnotesize
+\begin{center}
+\fitbox{%
+\begin{tabular}{lrrr}
+  \toprule
+  单任务能耗（nJ） & ref & varA & varB \\
+  \midrule
+  随机 & 1\,462.710 & 430.470 & 122.711 \\
+  全零 & 1\,414.652 & 414.781 & 111.026 \\
+  极值 & 1\,433.927 & 411.697 & 116.537 \\
+  相消 & 1\,456.718 & 335.643 & 114.953 \\
+  \bottomrule
+\end{tabular}}
+\end{center}
+\begin{block}{同一随机任务的改善}
+  $A_0/A=2.36$，$D_0/D=4.76$，$E_0/E=11.92$。
+  按三项倍数的几何平均计算 $J=5.12$。
+\end{block}
+\scriptsize
+四类样本共十二次门级检查均通过。每次逐位核对 256 个输出值和地址。相消样本的
+varB 任务时长为 21.43 $\mu$s，其余三类为 21.91 $\mu$s。
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{\textbf{单变量对照：varB 指数行缓冲释放时机}}
+\footnotesize
+\begin{center}
+\fitbox{%
+\begin{tabular}{lrr}
+  \toprule
+  项目 & 调整前 & 调整后 \\
+  \midrule
+  \texttt{erow} 释放点 & $PV$ 结束 & 归一化结束 \\
+  纯计算周期 & 1\,738 & 1\,423 \\
+  完整任务周期 & 2\,506 & 2\,191 \\
+  完整任务时延 ($\mu$s) & 25.06 & 21.91 \\
+  综合面积 ($\mu$m$^2$) & 67\,867.5 & 67\,960.6 \\
+  随机任务能耗 (nJ) & 138.633 & 122.711 \\
+  最大 RMSE／绝对误差 & 0.002492／0.006034 & 0.002492／0.006034 \\
+  \bottomrule
+\end{tabular}}
+\end{center}
+\begin{block}{缓冲提前释放让下一行更早开始}
+  归一化结束后，$PV$ 读取概率行和掩码，指数行缓冲可给下一行复用。
+  两版各复查 616 项、逐位失配为零。TT 100 MHz 下完整时延下降 12.6\%，
+  任务窗口能耗下降 11.5\%，面积增加 0.14\%。
+\end{block}
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{\textbf{存储开销集中在 Q/K/V 和整矩阵中间结果}}
 \begin{columns}[t,onlytextwidth]
   \column{.48\textwidth}
   \scriptsize
@@ -824,41 +786,74 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
     \toprule
     方案 & 面积 ($\mu$m$^2$) & 触发器 \\
     \midrule
-    ref  & 171\,005 & 25\,357 \\
-    varA & 149\,528 & 21\,384 \\
-    varB & 73\,297  & 9\,411 \\
+    ref  & 160\,620 & 25\,357 \\
+    varA & 140\,768 & 21\,384 \\
+    varB & 67\,961  & 9\,411 \\
     \bottomrule
   \end{tabular}
   \end{center}
   \vspace{-1mm}
-  {\tiny 数组占触发器 80.8\,\%（ref）与 95.7\,\%（varB）；触发器占单元面积 62\textasciitilde64\,\%（GPDK045 逐单元实测）。}
+  {\tiny 表中为 SMIC 40LL TT 综合数据。GPDK045 历史实验中，触发器占标准单元面积的 62\textasciitilde64\,\%。}
   \vspace{1.5mm}
 
-  \textbf{所以想省面积，第一优先级是省寄存器。}\;
-  三个乘法器实例（\texttt{u\_exp}、\texttt{mul\_118\_59}、\texttt{u\_quant}）加起来只占 11\% 的功耗；
-  功耗差异 $2.39\times$ 也基本等于触发器数量比 $2.18\times$。
+  varB 以跨行流水和行缓冲替代两张整矩阵，综合面积为 ref 的 42.3\%。
   \column{.49\textwidth}
   \scriptsize
   \begin{block}{\textbf{\scriptsize ref 的 25\,357 个触发器从哪来}}
     \begin{tabular}{lr}
-      $q,k,v$ & 7\,680 \\
-      $S$ 全矩阵 & 5\,632 \\
+      $q,k,v$ & 12\,288 \\
+      $S$ 全矩阵 & 8\,192 \\
       $p$ 全矩阵 & 4\,352 \\
-      其余（行缓冲/控制） & 7\,693 \\
+      其余（行缓冲/控制） & 525 \\
     \end{tabular}
   \end{block}
   \begin{block}{\textbf{\scriptsize 余额还剩多少}}
-    varB 的 9\,411 个里 \textbf{7\,680 是 $q/k/v$ 底座}——三个矩阵必须同时在片，除非允许重新装载。
-    面积上限被它锁死，所以 varB 只赢 2.33 倍，而不是更多。
+    varB 的 9\,411 个触发器中，\textbf{7\,680 个保存 $q/k/v$}，其余用于行缓冲、计算与控制。
   \end{block}
 \end{columns}
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{\textbf{固定网表扫频：150 MHz 出现 setup 违例}}
+\begin{center}
+  \includegraphics[width=\linewidth]{figures/p4-frequency-sweep.png}
+\end{center}
+\footnotesize
+各方案复用 100 MHz 映射网表。TT 1.10 V 下重放同一随机任务，80 至 150 MHz 的
+单任务能耗变化小于 0.06\%。\par\smallskip
+120 MHz 时布局前 setup WNS 为 +0.226 ns（ref）与 +0.139 ns（varB）。
+150 MHz 两者均小于零。主对照采用 100 MHz。
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{\textbf{布局布线阶段结果}}
+\footnotesize
+\begin{center}
+\begin{tabular}{lrr}
+  \toprule
+  100 MHz，Innovus 25.12 & ref & varB \\
+  \midrule
+  布线后单元面积（$\mu$m$^2$） & 待提取 & 75\,162.024 \\
+  芯片占地（$\mu$m$^2$） & 待提取 & 130\,767.437 \\
+  SS setup WNS（ns） & 待提取 & $-0.875$ \\
+  FF hold WNS（ns） & 待提取 & $-0.421$ \\
+  NanoRoute DRC 标记 & 待核对 & 115\,649 \\
+  连通性检查 & 待核对 & 通过 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\begin{block}{后端进度}
+  两套 100 MHz TT 网表采用相同的 SMIC 40LL 工艺库和布线设置。
+  ref 已完成 CTS，正在从检查点续跑详细布线。
+  varB 仍有时序与几何违例。
+\end{block}
 \end{frame}
 
 %%%% ============ 6 结论 ============
 \section[结论]{结论}
 
 \begin{frame}[t]
-\frametitle{\textbf{四条取舍，两个项目边界}}
+\frametitle{\textbf{位宽、行缓冲和并行度的取舍}}
 \footnotesize
 \begin{center}
 \fitbox{%
@@ -867,9 +862,9 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
   维度 & 做法 & 拿到什么 & 付了什么 \\
   \midrule
   精度 & 16 $\to$ 10 bit & 乘法器面积降到 39\% & RMSE 仍留 24 倍余量 \\
-  面积 & 全矩阵 $\to$ 行融合 & 面积 $2.04\times$ & 多 272 个双缓冲触发器 \\
+  面积 & 全矩阵 $\to$ 行融合 & 面积 $2.07\times$ & 双缓冲及流水控制 \\
   时延 & 1 $\to$ 4 lane & 周期 $2.88\times$ & 4 个乘法器，面积 $1.14\times$ \\
-  能耗 & 以上叠加 & $E_0/E=11.99$ & 取决于前三条组合 \\
+  能耗 & 以上叠加 & $E_0/E=11.92$ & 取决于前三条组合 \\
   \bottomrule
 \end{tabular}}
 \end{center}
@@ -877,20 +872,19 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
 \begin{columns}[t,onlytextwidth]
   \column{.50\textwidth}
   \scriptsize
-  \textbf{刻意不做的四件事}（每件都能说出理由）
+  \textbf{数值与结构选择}
   \begin{itemize}
-    \item 动态缩放：输入范围已知，省不出位宽；
-    \item 在线 softmax：\textbf{收益与行融合重复}，不是「判据禁止」；
-    \item 近似乘法器：逐位一致会把近似误差直接暴露成失配；
-    \item 提前降到 8 bit：安全垫只够扛 3 倍，撑不住已实测的 5 倍。
+    \item 输入区间固定，Q/K/V 统一采用定点量化。
+    \item 四路乘加缩短点积周期，行融合缩小中间存储。
+    \item \texttt{fold\_l2e} 面积收益为 1.27\%，同时增大定点误差。
   \end{itemize}
   \column{.47\textwidth}
   \scriptsize
-  \textbf{两个必须写进报告的边界}
+  \textbf{实验条件}
   \begin{itemize}
-    \item P\&R 跑通了 floorplan$\to$CTS$\to$route$\to$qrc$\to$STA，但\textbf{不可签核}：
-    tech LEF 为工具生成，且未做后布线优化（38 万个 DRC marker 中相当一部分是规则失真）；
-    \item 题面的「统一参考实现」尚未领取，现阶段用自己的 ref 顶住，结构拿到即可替换。
+    \item 以仓库当前 ref 为基线，最终方案选 varB。
+    \item 综合和任务窗口功耗使用 TT/100 MHz。
+    \item 后端按 SS 检查 setup，按 FF 检查 hold。
   \end{itemize}
 \end{columns}
 \end{frame}
@@ -899,24 +893,22 @@ varA 与 varB 的数值格式\textbf{完全一致}——否则差异里会同时
 \frametitle{\textbf{结论}}
 \footnotesize
 \begin{enumerate}
-  \item \textbf{数值主线站得住。}\;
+  \item \textbf{数值验证。}\;
   10 bit 定点 $+$ 16 项 LUT 的 $2^{-f}$ $+$ 每行一次倒数：RMSE 0.0025（限 0.06，24 倍余量）、
   MaxAE 0.0060（限 0.20，33 倍余量），乘法器面积降到 16 bit 方案的 39\%。
 
-  \item \textbf{结构主线是「删存储」而不是「加算力」。}\;
-  62\,\% 的面积是触发器，所以行融合（$S/P$ 全矩阵 $\to$ 16 深行缓冲）才是最大的一笔：
-  面积 $2.33\times$、能耗 $11.99\times$，而 lane 数与数值格式一位没动。
+  \item \textbf{行融合。}\;
+  $S/P$ 采用 16 深行缓冲，取消两张整矩阵存储。
+  最终 varB 相对 ref 的面积改善 $2.36\times$、能耗改善 $11.92\times$。
 
-  \item \textbf{口径主线让结论可复现。}\;
-  三套实现共享端口契约与 \texttt{core/}，一份 tb 靠 \texttt{+define+DUT} 驱动三个 DUT；
-  九次综合（三方案 $\times$ 三角）全部满足 100\,MHz，最差裕量 $+0.005$\,ns。
+  \item \textbf{缓冲释放时机。}\;
+  归一化后释放指数行缓冲，单变量对照节省 315 拍。
+  同一随机任务能耗降低 11.5\%，两版逐位结果一致。
 \end{enumerate}
 \vspace{1mm}
-\begin{block}{\textbf{\scriptsize 下一步（按依赖排序）}}
+\begin{block}{\textbf{\scriptsize 测量范围}}
   \scriptsize
-  ① 在有 EDA 的机器上跑 \texttt{fold\_l2e} 的六类回归与综合，验证关键路径 9.4\,ns $\to$ 6.3\textasciitilde6.8\,ns；
-  ② 频率扫描（80／100／120／150\,MHz）画「能耗—频率」曲线；
-  ③ 拿到官方参考实现后重做成对测量；④ 后布线 \texttt{optDesign -postRoute} 与 Calibre DRC 复核。
+  门级任务功耗基于零延迟波形。配对后端实验单独报告 RC 提取、时序和几何检查结果。
 \end{block}
 \end{frame}
 

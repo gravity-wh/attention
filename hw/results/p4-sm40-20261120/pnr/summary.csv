@@ -1,0 +1,2 @@
+variant,cells,cell_area_um2,die_width_um,die_height_um,die_area_um2,ss_setup_wns_ns,ss_setup_tns_ns,ss_setup_violations,ff_hold_wns_ns,ff_hold_tns_ns,ff_hold_violations,nanoroute_drc_markers,geometry_violations_reported,geometry_limit_reached,connectivity,qrc_incomplete_nets
+varB,27797,75162.024,362.880,360.360,130767.437,-0.875,-183.698,582,-0.421,-4044.4,11353,115649,1000,True,PASS,0

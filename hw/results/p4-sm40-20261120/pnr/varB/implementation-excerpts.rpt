@@ -1,0 +1,29 @@
+[pnr] ========== 0. 初始化（tech LEF 必须在单元 LEF 前面） ==========
+[pnr] MMMC: tt=$SMIC40_PDK/sc9mc_base_rvt_c40/r1p1/lib/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.lib
+[pnr] MMMC: ss=$SMIC40_PDK/sc9mc_base_rvt_c40/r1p1/lib/sc9mc_logic0040ll_base_rvt_c40_ss_typical_max_0p99v_125c.lib
+[pnr] MMMC: ff=$SMIC40_PDK/sc9mc_base_rvt_c40/r1p1/lib/sc9mc_logic0040ll_base_rvt_c40_ff_typical_min_1p21v_m40c.lib
+[pnr] 单元数 = 24190
+[pnr] 线程数 = 2
+[pnr] ========== 1. 电源网络 ==========
+[pnr] ========== 2. Floorplan（利用率 0.55） ==========
+[pnr] floorplan 完成
+[pnr] ========== 3. Place ==========
+[pnr] placement 完成
+[pnr] ========== 4. CTS（单时钟，ccopt） ==========
+[pnr] ========== 4. Restore CTS checkpoint ==========
+[pnr] ========== 5. Route ==========
+#Total number of DRC violations = 0
+#Total 29003 nets were built. 1277 nodes added to break long wires. 0 net(s) have incomplete routes.
+#WARNING (NRDR-30) Detail routing is stopped due to too many DRC violations.
+#Total number of DRC violations = 115109
+#Total number of DRC violations = 115210
+#Total number of DRC violations = 115668
+#Total number of DRC violations = 115649
+#Total number of DRC violations = 115649
+WARNING   NRDR-30              1  Detail routing is stopped due to too man...
+[pnr] 布线完成
+[pnr] ========== 6. Save routed design ==========
+[pnr] ========== 7. Post-route extraction and timing ==========
+#Total 29003 nets were built. 695 nodes added to break long wires. 0 net(s) have incomplete routes.
+**WARN: (IMPVFG-1103):	VERIFY DRC did not complete: Number of violations hits the Error Limit [1000]. To get full DRC report, please use "verify_drc -limit 0", which will have a runtime impact.
+[pnr] ========== DONE ==========
