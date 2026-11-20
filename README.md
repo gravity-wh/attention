@@ -11,6 +11,8 @@ Transform/
 │   ├── assignment/        题面、评分表、附录模板
 │   ├── theory/            理论分析草稿（架构对比、误差分析）
 │   ├── report/            报告源（md/tex）+ 个人贡献说明
+│   │   └── slides/        汇报片子（SEU Beamer 模板；build.ps1 → deliverables/*.pdf）
+│   ├── engineering/       工程笔记（流程、综合结果、协作边界）
 │   └── figures/           图源（svg / drawio / 生成脚本）
 ├── reference/             参考文献（只读，勿改）
 ├── hw/                    硬件工程（给芯片看的部分）→ 详见 hw/README.md
@@ -44,6 +46,13 @@ make vec  SEED=20260101        # 黄金模型导出测试向量
 make regress VARIANT=ref MODE=smoke
 make pair VARIANT=ref TAG=ref-sm40-tt MODE=full   # 仿真+综合同一 TAG → A/D/E 齐全
 make collect                   # 汇总指标 → results/metrics.csv
+```
+
+汇报片子不进虚拟机，Windows 侧直接编（xeCJK 模板 + 本地镜像构建，绕开 UNC 限制）：
+
+```powershell
+cd docs/report/slides
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Name ic_slides   # → deliverables\ic_slides.pdf
 ```
 
 ## 状态

@@ -73,6 +73,24 @@ hw/tb/vectors/*_full/
 deliverables/**
 !deliverables/.gitkeep
 
+# ---- Beamer 片子（docs/report/slides）----
+# 构建走 build.ps1，在 %TEMP% 镜像里编，NAS 上不该出现这些；
+# 万一有人直接跑 xelatex，也不会把中间文件塞进 git status。
+docs/report/slides/*.aux
+docs/report/slides/*.nav
+docs/report/slides/*.snm
+docs/report/slides/*.toc
+docs/report/slides/*.out
+docs/report/slides/*.vrb
+docs/report/slides/*.fls
+docs/report/slides/*.fdb_latexmk
+docs/report/slides/*.synctex.gz
+docs/report/slides/*.bbl
+docs/report/slides/*.blg
+docs/report/slides/missfont.log
+# 片子 PDF 属于导出物，默认写 deliverables/；留在这里的也不进库
+docs/report/slides/*.pdf
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
