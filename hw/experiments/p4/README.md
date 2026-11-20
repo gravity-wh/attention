@@ -1,0 +1,55 @@
+# P4 实验复现
+
+采用 SMIC 40LL SC9MC RVT r1p1。基线为仓库当前 ref，任务周期按首次装载至最后一个输出。脚本从 hw/ 运行，所有实验产物使用自己的 TAG。
+
+## RTL 和表 3
+
+~~~bash
+bash experiments/p4/regress-verilator.sh varB varB-early-release
+~~~
+
+对照副本只替换为提交 3c381e0 的 varB 顶层，然后用相同脚本运行 varB-late-release。折叠候选在另一干净副本中应用 fold-l2e.patch，再独立生成向量。回归脚本以已有的系统 testbench 和向量生成器为基础。
+
+~~~bash
+patch -p1 < experiments/p4/fold-l2e.patch
+bash experiments/p4/regress-verilator.sh varB varB-fold-l2e
+~~~
+
+## 综合与布线
+
+用相同版本 Genus 在 TT、100 MHz 下映射 ref 和 varB。布局布线用同样的利用率、IO 放置规则、金属栈和后布线提取设置，SS 查 setup，FF 查 hold。
+
+~~~bash
+make pdkcheck PDK=SC9MC CORNER=tt
+make syn VARIANT=ref TAG=ref-sm40-tt-p4 PDK=SC9MC CORNER=tt SYN_CPUS=4
+make syn VARIANT=varB TAG=varB-sm40-tt-p4 PDK=SC9MC CORNER=tt SYN_CPUS=4
+
+patch -p1 < experiments/p4/innovus25.patch
+mkdir -p work_techlef
+python3 experiments/p4/derive-techlef.py \
+    /opt/cadence/PDK/smic40/derived/smic40_tech.lef work_techlef/smic40_tech.lef
+PNR_CPUS=2 make pnr VARIANT=varB TAG=varB-sm40-tt-p4 PDK=SC9MC CORNER=tt
+PNR_CPUS=2 make pnr VARIANT=ref TAG=ref-sm40-tt-p4 PDK=SC9MC CORNER=tt
+~~~
+
+派生脚本沿用 gen_techlef.sh 的矩形方法，从各层默认 VIARULE 生成显式过孔。两个设计共用生成后的 tech LEF，工艺库原件由 PDK 环境提供。
+
+## 活动功耗和固定网表扫频
+
+在 Linux 下用 Yosys 从综合采用的 TT Liberty 生成零延迟功能模型，再用 Verilator 编译映射网表。每次仿真检查全部 256 个输出的地址和值。反标范围从第一拍装载到最后一个输出。以下为 ref 的 100 MHz 示例。
+
+~~~bash
+make vec MODE=full SEED=20260101 VARIANT=ref
+gate=runs/ref-sm40-tt-p4/activity
+mkdir -p "$gate"
+cp runs/ref-sm40-tt-p4/syn/{netlist.v,constraints.sdc} "$gate/"
+liberty=/opt/cadence/PDK/smic40/sc9mc_base_rvt_c40/r1p1/lib/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.lib
+bash experiments/p4/gate-vcd.sh top_ref 100 "$gate/netlist.v" "$liberty" \
+    tb/vectors/s20260101_full qb16qf13 "$gate/mhz100" random_0 zero_0 extreme_0 cancel_0 &&
+    printf 'PASS\n' > "$gate/mhz100/gate.status"
+
+bash experiments/p4/run-power-sweep.sh ref 100 "$gate/mhz100" runs/p4-power/ref/mhz100
+python3 experiments/p4/collect-power.py runs/p4-power runs/p4-power/summary.csv
+~~~
+
+将方案改为 varB 或 varA 时，使用它们的网表和 qb10qf7 黄金值。扫频对 ref 和 varB 复用各自的 100 MHz 映射网表，重设各频点的时钟周期、I/O 延迟和不确定性，并重放相同 random_0。每个频点先报布局前 setup WNS，再用门级 VCD 反标计算动态与泄漏功耗。报告中的能耗等于任务窗口平均总功率乘以时长。零延迟仿真未计入 SDF 毛刺活动，布局前计时未计入布线寄生。

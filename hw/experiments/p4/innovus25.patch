@@ -1,0 +1,332 @@
+--- a/flow/pnr/run_pnr.sh
++++ b/flow/pnr/run_pnr.sh
+@@ -7,6 +7,10 @@
+ #  本脚本只做前置检查和落地日志，不自己解释配置（避免两处真相）。
+ # =====================================================================
+ set -uo pipefail
++
++if [ -s "$PWD/work_techlef/smic40_tech.lef" ]; then
++    export PNR_TECH_LEF="$PWD/work_techlef/smic40_tech.lef"
++fi
+
+ die() { echo "✗ $*" >&2; exit 1; }
+
+@@ -22,12 +26,9 @@
+     [ -f "$f" ] || die "找不到输入文件: $f"
+ done
+
+-# 两个 innovus 并行会互相抢 license 和 CPU，且 DRC 结果不可信
+-if pgrep -x innovus >/dev/null 2>&1; then
+-    echo "✗ 已有 innovus 在跑：" >&2
+-    pgrep -a -x innovus >&2
+-    die "先等它结束或 pkill -9 -x innovus"
+-fi
++# Enforce one concurrent layout run per project workspace.
++exec 9>"$PWD/.pnr.lock"
++flock -w 300 9 || die "当前工作目录已有布局布线任务"
+
+ mkdir -p "$PNR_OUT"
+
+@@ -49,29 +50,6 @@
+ export PNR_CPUS
+ echo "[pnr] MemTotal=${MEM_GB} GB -> 布线线程数 PNR_CPUS=$PNR_CPUS"
+
+-# ---- 内存护栏：超过上限就主动收手，别让 VM 被 OOM 打挂 ----------------
+-# 打挂的代价是整台 VM 失去响应（需要人工重启 + 重启 NAT 服务），
+-# 而主动终止只是丢一次布线结果（CTS checkpoint 还在，可再来）。
+-MEM_WARN_GB=${MEM_WARN_GB:-12}
+-MEM_KILL_GB=${MEM_KILL_GB:-14}
+-(
+-  while pgrep -x innovus >/dev/null 2>&1; do
+-    rss_kb=$(ps -eo rss,comm | awk '$2=="innovus"{s+=$1} END{printf "%d", s}')
+-    rss_gb=$(( ${rss_kb:-0} / 1048576 ))
+-    if [ "$rss_gb" -ge "$MEM_KILL_GB" ]; then
+-      echo "[pnr] ⚠ innovus RSS ${rss_gb} GB >= ${MEM_KILL_GB} GB，主动终止以免 VM 被 OOM 拖死" >&2
+-      pkill -TERM -x innovus
+-      break
+-    elif [ "$rss_gb" -ge "$MEM_WARN_GB" ]; then
+-      echo "[pnr] ⚠ innovus RSS ${rss_gb} GB（警戒线 ${MEM_WARN_GB} GB）"
+-    fi
+-    sleep 20
+-  done
+-) &
+-WATCHDOG=$!
+-trap 'kill $WATCHDOG 2>/dev/null' EXIT
+-
+-
+ # SDC 清洗：Genus 导出的 sdc 里有 set_dont_use [get_lib_cells <lib>/FRICG_*]，
+ # <lib> 是 .lib 的内部库名，Innovus 在 source sdc 时报 TCLCMD-917 并中断流程。
+ # 这些行只约束时钟门控单元，本设计没有 ICG（综合时该属性不被 15.2 支持），
+@@ -90,9 +68,33 @@
+
+ cd "$(dirname "$0")/../.." || die "进不去 hw/ 目录"
+
+-timeout 14400 innovus -no_gui -files flow/pnr/pnr.tcl 2>&1 | tee "$PNR_OUT/pnr.log"
+-rc=${PIPESTATUS[0]}
+-[ "$rc" -eq 0 ] || die "innovus 退出码 $rc（见 $PNR_OUT/pnr.log）"
++timeout 14400 innovus -no_gui -legacy_ui -batch -files flow/pnr/pnr.tcl > "$PNR_OUT/pnr.log" 2>&1 9>&- &
++launcher=$!
++(
++  low=0
++  while kill -0 "$launcher" 2>/dev/null; do
++    if awk '/MemAvailable/ {available=$2} /SwapFree/ {swap=$2}
++            END {exit !(available < 400000 && swap < 400000)}' /proc/meminfo; then
++      low=$((low + 1))
++    else
++      low=0
++    fi
++    if [ "$low" -ge 3 ]; then
++      echo "[pnr] WSL memory exhausted; stopping only this Innovus run" >&2
++      kill -TERM "$launcher" 2>/dev/null || :
++      break
++    fi
++    sleep 5
++  done
++) 9>&- &
++watchdog=$!
++wait "$launcher"
++rc=$?
++kill "$watchdog" 2>/dev/null || :
++if [ "$rc" -ne 0 ]; then
++    tail -30 "$PNR_OUT/pnr.log" >&2
++    die "innovus 退出码 $rc（见 $PNR_OUT/pnr.log）"
++fi
+ grep -q "\[pnr\] ========== DONE ==========" "$PNR_OUT/pnr.log" \
+     || die "流程没跑到 DONE（见 $PNR_OUT/pnr.log 末尾）"
+
+--- a/flow/pnr/pnr.tcl
++++ b/flow/pnr/pnr.tcl
+@@ -1,101 +1,5 @@
+-# =====================================================================
+-#  flow/pnr/pnr.tcl —— Innovus 全流程（floorplan -> place -> CTS -> route）
+-#
+-#  由 flow/pnr/run_pnr.sh 调用，所有路径经环境变量注入。
+-#  输入是 Genus 综合后的门级网表 + 它自己导出的 netlist.sdc，
+-#  所以"综合和 P&R 用的是同一份约束"这件事由文件传递保证，不靠人抄。
+-#
+-#  统计口径（写报告时必须带上）：
+-#    面积 = 布局布线后实际占用的单元面积 + 布线拥塞导致的空白
+-#    时序 = 真实 RC 提取（qrcTechFile）后的 STA，不是综合阶段的线负载估计
+-#    功耗 = 仍需 postRoute + SAIF/VCD 才准确，本流程只报工具默认活动率
+-# =====================================================================
+-
+-proc env {name} {
+-    if {![info exists ::env($name)]} { error "缺少环境变量 $name（必须由 run_pnr.sh 导出）" }
+-    return $::env($name)
++if {[catch {source flow/pnr/pnr_implementation.tcl} message]} {
++    puts stderr "P4 Innovus flow failed: $message"
++    puts stderr $::errorInfo
++    exit 1
+ }
+-proc step {msg} { puts "\n\[pnr\] ========== $msg ==========" }
+-
+-set tech_lef [env PNR_TECH_LEF]
+-set cell_lef [env PNR_CELL_LEF]
+-set netlist  [env PNR_NETLIST]
+-set top      [env PNR_TOP]
+-set outdir   [env PNR_OUT]
+-set util     [expr {[info exists ::env(PNR_UTIL)] ? $::env(PNR_UTIL) : 0.55}]
+-
+-file mkdir $outdir
+-
+-step "0. 初始化（tech LEF 必须在单元 LEF 前面）"
+-set init_lef_file [list $tech_lef $cell_lef]
+-set init_verilog  $netlist
+-set init_top_cell $top
+-set init_mmmc_file [env PNR_MMMC]
+-set init_pwr_net  VDD
+-set init_gnd_net  VSS
+-init_design
+-puts "\[pnr\] 单元数 = [llength [dbGet -e top.insts.name]]"
+-
+-# M1 只放单元内部的电源轨/引脚，信号布线从 M2 起。
+-# 原因：由 techfile.tf 生成的 tech LEF 里 M1 间距规则与单元实际几何不一致，
+-# 一旦允许 NanoRoute 用 M1，CTS 阶段就会出现 8 万+ 条 M1 间距违例且不收敛。
+-# 禁用 M1 信号布线后违例降到可收敛范围；代价是布线资源变少，面积/时序略差，
+-# 报告里必须注明"信号层从 M2 起"。
+-# 多线程：不设的话 NanoRoute 默认单线程，69k 单元 detail routing 会跑数小时。
+-# 线程数由 run_pnr.sh 按实际内存算出（PNR_CPUS）——写死会在小内存机器上 OOM。
+-set cpus [expr {[info exists ::env(PNR_CPUS)] ? $::env(PNR_CPUS) : 2}]
+-setMultiCpuUsage -localCpu $cpus
+-puts "\[pnr\] 线程数 = $cpus"
+-
+-setNanoRouteMode -routeBottomRoutingLayer 2
+-
+-step "1. 电源网络"
+-globalNetConnect VDD -type pgpin -pin VDD -inst * -override
+-globalNetConnect VSS -type pgpin -pin VSS -inst * -override
+-globalNetConnect VDD -type tiehi
+-globalNetConnect VSS -type tielo
+-
+-step "2. Floorplan（利用率 $util）"
+-floorPlan -r 1.0 $util 5 5 5 5
+-addRing -nets {VDD VSS} -type core_rings -follow core \
+-        -layer {top M5 bottom M5 left M4 right M4} \
+-        -width 1.2 -spacing 0.6 -offset 1.5
+-addStripe -nets {VDD VSS} -layer M4 -direction vertical \
+-          -width 0.6 -spacing 0.6 -set_to_set_distance 25
+-addStripe -nets {VDD VSS} -layer M5 -direction horizontal \
+-          -width 0.6 -spacing 0.6 -set_to_set_distance 25
+-sroute -connect {corePin} -layerChangeRange {M1 M5} -allowJogging 1
+-puts "\[pnr\] floorplan 完成"
+-
+-step "3. Place"
+-placeDesign
+-puts "\[pnr\] placement 完成"
+-
+-step "4. CTS（单时钟，ccopt）"
+-ccopt_design
+-puts "\[pnr\] CTS 完成"
+-# CTS 后立即存盘：布线可能跑很久甚至失败，有这个点就能 saveRestore 续跑，
+-# 不用重做 place/CTS（单次 CTS 在本机约 40 分钟）。
+-saveDesign $outdir/after_cts.enc
+-
+-step "5. Route"
+-routeDesign
+-puts "\[pnr\] 布线完成"
+-
+-# 布线后必须重连 PG 到 std cell（route 会断开部分连接的情况）
+-sroute -connect {corePin} -layerChangeRange {M1 M5}
+-
+-step "6. 寄生提取 + 签核时序"
+-setExtractRCMode -engine postRoute -effort high -coupled true
+-extractRC
+-timeDesign -postRoute -outDir $outdir/timing_postroute -numPaths 10
+-timeDesign -postRoute -hold -outDir $outdir/timing_postroute_hold -numPaths 10
+-
+-step "7. 落盘"
+-saveDesign $outdir/pnr.enc
+-write_netlist $outdir/pnr_netlist.v
+-defOut -floorplan -netlist -routing $outdir/pnr.def
+-summaryReport -outdir $outdir/summary
+-
+-puts "\n\[pnr\] ========== DONE =========="
+-exit
+--- /dev/null
++++ b/flow/pnr/pnr_implementation.tcl
+@@ -0,0 +1,125 @@
++# =====================================================================
++#  flow/pnr/pnr.tcl —— Innovus 全流程（floorplan -> place -> CTS -> route）
++#
++#  由 flow/pnr/run_pnr.sh 调用，所有路径经环境变量注入。
++#  输入是 Genus 综合后的门级网表 + 它自己导出的 netlist.sdc，
++#  所以"综合和 P&R 用的是同一份约束"这件事由文件传递保证，不靠人抄。
++#
++#  统计口径（写报告时必须带上）：
++#    面积 = 布局布线后实际占用的单元面积 + 布线拥塞导致的空白
++#    时序 = 真实 RC 提取（qrcTechFile）后的 STA，不是综合阶段的线负载估计
++#    功耗 = 仍需 postRoute + SAIF/VCD 才准确，本流程只报工具默认活动率
++# =====================================================================
++
++proc env {name} {
++    if {![info exists ::env($name)]} { error "缺少环境变量 $name（必须由 run_pnr.sh 导出）" }
++    return $::env($name)
++}
++proc step {msg} { puts "\n\[pnr\] ========== $msg ==========" }
++
++set tech_lef [env PNR_TECH_LEF]
++set cell_lef [env PNR_CELL_LEF]
++set netlist  [env PNR_NETLIST]
++set top      [env PNR_TOP]
++set outdir   [env PNR_OUT]
++set util     [expr {[info exists ::env(PNR_UTIL)] ? $::env(PNR_UTIL) : 0.55}]
++
++file mkdir $outdir
++
++step "0. 初始化（tech LEF 必须在单元 LEF 前面）"
++set init_lef_file [list $tech_lef $cell_lef]
++set init_verilog  $netlist
++set init_top_cell $top
++set init_mmmc_file [env PNR_MMMC]
++set init_pwr_net  VDD
++set init_gnd_net  VSS
++init_design
++puts "\[pnr\] 单元数 = [llength [dbGet -e top.insts.name]]"
++
++# M1 只放单元内部的电源轨/引脚，信号布线从 M2 起。
++# 原因：由 techfile.tf 生成的 tech LEF 里 M1 间距规则与单元实际几何不一致，
++# 一旦允许 NanoRoute 用 M1，CTS 阶段就会出现 8 万+ 条 M1 间距违例且不收敛。
++# 禁用 M1 信号布线后违例降到可收敛范围；代价是布线资源变少，面积/时序略差，
++# 报告里必须注明"信号层从 M2 起"。
++# 多线程：不设的话 NanoRoute 默认单线程，69k 单元 detail routing 会跑数小时。
++# 线程数由 run_pnr.sh 按实际内存算出（PNR_CPUS）——写死会在小内存机器上 OOM。
++set cpus [expr {[info exists ::env(PNR_CPUS)] ? $::env(PNR_CPUS) : 2}]
++setMultiCpuUsage -localCpu $cpus
++puts "\[pnr\] 线程数 = $cpus"
++
++setDesignMode -process 40
++setNanoRouteMode -routeBottomRoutingLayer 2
++setNanoRouteMode -drouteEndIteration 8
++
++step "1. 电源网络"
++globalNetConnect VDD -type pgpin -pin VDD -inst * -override
++globalNetConnect VSS -type pgpin -pin VSS -inst * -override
++globalNetConnect VDD -type tiehi
++globalNetConnect VSS -type tielo
++
++step "2. Floorplan（利用率 $util）"
++floorPlan -r 1.0 $util 5 5 5 5
++set ports [dbGet top.terms.name]
++set inputs [dbGet [dbGet -p top.terms.isInput 1].name]
++set outputs [dbGet [dbGet -p top.terms.isOutput 1].name]
++if {[llength $inputs] + [llength $outputs] != [llength $ports]} {
++    error "Unexpected top-level pin direction"
++}
++editPin -pin $inputs -side Left -layer M3 -spreadType SIDE
++editPin -pin $outputs -side Right -layer M3 -spreadType SIDE
++addRing -nets {VDD VSS} -type core_rings -follow core \
++        -layer {top M5 bottom M5 left M4 right M4} \
++        -width 1.2 -spacing 0.6 -offset 1.5
++addStripe -nets {VDD VSS} -layer M4 -direction vertical \
++          -width 0.6 -spacing 0.6 -set_to_set_distance 25
++addStripe -nets {VDD VSS} -layer M5 -direction horizontal \
++          -width 0.6 -spacing 0.6 -set_to_set_distance 25
++sroute -connect {corePin} -layerChangeRange {M1 M5} -allowJogging 1
++puts "\[pnr\] floorplan 完成"
++
++step "3. Place"
++# Genus uses scan-capable flops as functional cells. No DFT scan chains are inserted.
++setPlaceMode -place_global_ignore_scan true -place_global_reorder_scan false
++setPlaceMode -place_global_exp_allow_missing_scan_chain true
++placeDesign
++puts "\[pnr\] placement 完成"
++
++step "4. CTS（单时钟，ccopt）"
++ccopt_design
++puts "\[pnr\] CTS 完成"
++# CTS 后立即存盘：布线可能跑很久甚至失败，有这个点就能 saveRestore 续跑，
++# 不用重做 place/CTS（单次 CTS 在本机约 40 分钟）。
++saveDesign $outdir/after_cts.enc
++
++step "5. Route"
++routeDesign
++puts "\[pnr\] 布线完成"
++
++# 布线后必须重连 PG 到 std cell（route 会断开部分连接的情况）
++sroute -connect {corePin} -layerChangeRange {M1 M5}
++
++step "6. Save routed design"
++saveDesign $outdir/pnr.enc
++saveNetlist $outdir/pnr_netlist.v
++defOut -floorplan -netlist -routing $outdir/pnr.def
++
++step "7. Post-route extraction and timing"
++setAnalysisMode -analysisType onChipVariation -cppr both
++setExtractRCMode -engine postRoute -effort medium -coupled true
++extractRC
++timeDesign -postRoute -outDir $outdir/timing_postroute -numPaths 10
++timeDesign -postRoute -hold -outDir $outdir/timing_postroute_hold -numPaths 10
++report_area > $outdir/area_final.rpt
++if {[catch {reportPower > $outdir/power_final.rpt} message]} {
++    puts "P4 power report unavailable: $message"
++}
++if {[catch {verify_drc -report $outdir/geometry.rpt} message]} {
++    puts "P4 geometry report unavailable: $message"
++}
++if {[catch {verifyConnectivity -type all -report $outdir/connectivity.rpt} message]} {
++    puts "P4 connectivity report unavailable: $message"
++}
++summaryReport -outdir $outdir/summary
++
++puts "\n\[pnr\] ========== DONE =========="
++exit

@@ -1,0 +1,2 @@
+sample,gate_check,start_ns,stop_ns,duration_ns,outputs
+random_0,PASS,49.995,69596.373,69546.378,256

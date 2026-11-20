@@ -171,6 +171,18 @@ def main():
                        r"([0-9.eE+-]+)\s*\)?\s*(mW|uW|µW|nW|W)\b", pwr_rpt, re.I)
         leak_mw = scale_power(float(ml.group(1)), ml.group(2)) if ml else None
 
+    # Genus 25 summarizes leakage, internal, switching and total in a Subtotal row.
+    if power_mw is None:
+        unit = re.search(r"^Power Unit:\s*(nW|uW|µW|mW|W)\s*$", pwr_rpt, re.M | re.I)
+        number = r"([0-9.eE+-]+)"
+        values = re.search(r"^[ \t]*Subtotal\s+" + r"\s+".join([number] * 4) + r"\s+100(?:\.0+)?%", pwr_rpt, re.M)
+        if unit and values:
+            leakage, internal, switching, total = map(float, values.groups())
+            leak_mw = scale_power(leakage, unit.group(1))
+            dyn_mw = scale_power(internal + switching, unit.group(1))
+            power_mw = scale_power(total, unit.group(1))
+            src["power"] = "power.rpt(Subtotal, %s)" % unit.group(1)
+
     # ---------------- 规模 ----------------
     # qor.rpt 的 Leaf Instance Count 才是叶子单元数；Tcl 的 llength
     # [get_cells -hier *] 会把 33 个层级实例也算进去（75469 vs 75436）。
