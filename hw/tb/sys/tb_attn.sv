@@ -133,6 +133,7 @@ module tb_attn;
   int cov_mis_b = 0;   // 0=无失配 1=有失配
   int cov_rm_b  = 0;   // rmse*10000，桶化后观察分布
 
+  `ifndef VERILATOR
   covergroup cg_task;
     option.per_instance = 1;
     cp_cat  : coverpoint cov_cat   { bins b[] = {[0:5]}; }
@@ -144,6 +145,7 @@ module tb_attn;
   endgroup
 
   cg_task cg = new();
+  `endif
 
   // ---------------------------------------------------------------- 主流程变量
   // 必须声明在 task 之前：load_vec() 要用 cfgtag 拼黄金值文件名，
@@ -296,7 +298,8 @@ module tb_attn;
       y = fp16_to_real(outv[i]);
       e = y - $bitstoreal(refv[i]);
       se += e * e;
-      if ($abs(e) > maxae) maxae = $abs(e);
+      if (e < 0.0) e = -e;
+      if (e > maxae) maxae = e;
     end
     rmse = $sqrt(se / NE);
 
@@ -308,7 +311,9 @@ module tb_attn;
     cov_lat_b = (lat < 300) ? 0 : (lat < 3000) ? 1 : 2;
     cov_mis_b = (mismatch == 0) ? 0 : 1;
     cov_rm_b  = int'(rmse * 10000.0);
+    `ifndef VERILATOR
     cg.sample();
+    `endif
   endtask
 
   // ---------------------------------------------------------------- 主流程
@@ -380,6 +385,7 @@ module tb_attn;
       end
 
       // ---- reset 用例：先存一轮，复位后重跑，两次必须逐位相同 ----
+      rdiff = 0;
       if (cat_name == "reset") begin
         for (int i = 0; i < NE; i++) outv_first[i] = outv[i];
         do_reset(3);
@@ -387,17 +393,17 @@ module tb_attn;
         run_task(lat, ord, recv);
         if (lat < 0) begin n_task_fail++; continue; end
 
-        rdiff = 0;
         for (int i = 0; i < NE; i++) if (outv[i] !== outv_first[i]) rdiff++;
         if (rdiff != 0)
           $display("  [RESET] 复位后输出与复位前不一致：%0d 个元素不同", rdiff);
         else if (verbose)
           $display("  [RESET] 复位前后逐位一致 ✓");
-        mismatch += rdiff;
       end
 
       // ---- 判据 ----
       check_task(passv, mismatch, rmse, maxae, nf);
+      mismatch += rdiff;
+      if (rdiff != 0) passv = 1'b0;
       if (ord != 0) begin
         $display("  [PROTO] o_addr 未严格递增，异常 %0d 次", ord);
         passv = 1'b0;
