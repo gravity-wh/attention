@@ -27,6 +27,11 @@ work/
 transcript
 wave*.do
 
+# ---- 精选证据日志：只反忽略 docs/report/evidence，不放开全仓 *.log ----
+!docs/report/evidence/
+!docs/report/evidence/**
+!docs/report/evidence/**/*.log
+
 # ---- 综合 / 后端产物 ----
 *.ddc
 *.db

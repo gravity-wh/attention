@@ -1,0 +1,11 @@
+--- a/hw/rtl/varB/top_varB.sv
++++ b/hw/rtl/varB/top_varB.sv
+@@ -335,7 +335,7 @@
+             b_bank       <= a2b_b;
+             b_tsum_latch <= a2b_t;
+             div_start    <= 1'b1;
+-            a2b_v        <= 1'b0;
++            a2b_v        <= 1'b1;
+           end
+         end else if (rcp_done) begin
+           b_busy  <= 1'b0;

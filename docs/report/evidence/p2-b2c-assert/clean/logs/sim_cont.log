@@ -1,0 +1,24 @@
+Command: /root/work/attention-final/hw/runs/p2-b2c-assert-final/simv +VECDIR=tb/vectors/s20260101_full +CFG=qb10qf7 +CAT=cont +N=8 +VERBOSE=0 -l runs/p2-b2c-assert-final/sim_cont.log
+Chronologic VCS simulator copyright 1991-2023
+Contains Synopsys proprietary information.
+Compiler version V-2023.12-SP2_Full64; Runtime version V-2023.12-SP2_Full64;  Nov 16 05:38 2026
+
+================================================================
+ tb_attn —— DUT=top_varB  cat=cont  n=8  clk=100 MHz
+ 判据：逐位一致 + RMSE<=0.060 + max|e|<=0.200
+ 向量：tb/vectors/s20260101_full   格式：qb10qf7
+================================================================
+----------------------------------------------------------------
+ 类别 cont        任务 8/8 通过
+ 时延 lat: min=1423 avg=1423 max=1423 周期（@100 MHz）；另装载 768 拍/任务
+ 最差 RMSE=0.001728  最差 max|e|=0.005767  最大逐位失配=0 个元素
+ 覆盖率：cat=cont lat_b=1 mism_b=0
+[SUMMARY] cat=cont tasks=8 pass=8 fail=0 lat_min=1423 lat_avg=1423 lat_max=1423 ld=768 rmse=0.001728 maxae=0.005767 mism=0 status=PASS
+ 结果：PASS
+================================================================
+$finish called from file "tb/sys/tb_attn.sv", line 456.
+$finish at simulation time            175505000
+           V C S   S i m u l a t i o n   R e p o r t 
+Time: 175505000 ps
+CPU Time:      0.250 seconds;       Data structure size:   0.0Mb
+Mon Nov 16 05:38:19 2026

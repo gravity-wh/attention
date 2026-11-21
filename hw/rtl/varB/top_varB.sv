@@ -132,6 +132,32 @@ module top_varB `ATTN_TOP_PORTS;
   logic [20:0] b_tsum_latch;
   logic [24:0] r_out;
   logic        rcp_busy, rcp_done;
+
+`ifndef SYNTHESIS
+  // synopsys translate_off
+  // B→C 只有单寄存器 b2c_v：B 完成时若 C 还没取走，结果会被覆盖。
+  // 当前时序下 B 周期 44 拍 < C 服务 80 拍，b2c_v 每行只占约 1 拍；
+  // 这里只做监控，不加反压寄存器（不加拍）。断言触发才说明时序余量被改坏。
+  int b2c_age_q;
+  int a2b_age_q;
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      b2c_age_q <= 0;
+      a2b_age_q <= 0;
+    end else begin
+      b2c_age_q <= b2c_v ? (b2c_age_q + 1) : 0;
+      a2b_age_q <= a2b_v ? (a2b_age_q + 1) : 0;
+      if (b2c_v && b2c_age_q >= 1)
+        $error("[VARB-B2C] b2c_v held more than 2 cycles: row=%0d nfin=%0d", b2c_row, nfin);
+      if (b2c_v && rcp_done)
+        $error("[VARB-B2C] B would overwrite pending b2c_v: row=%0d nfin=%0d", b_row, nfin);
+      if (a2b_v && a2b_age_q >= 1)
+        $error("[VARB-A2B] a2b_v held more than 2 cycles: row=%0d", a2b_r);
+    end
+  end
+  // synopsys translate_on
+`endif
+
   recip_unit u_rcp (
     .clk(clk), .rst_n(rst_n),
     .start(div_start), .t_sum(b_tsum_latch),

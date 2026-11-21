@@ -1,0 +1,25 @@
+Info: [VCS_SAVE_RESTORE_INFO] ASLR (Address Space Layout Randomization) is detected on the machine. To enable $save functionality, ASLR will be switched off and simv re-executed.
+Please use '-no_save' simv switch to avoid re-execution or '-suppress=ASLR_DETECTED_INFO' to suppress this message.
+Chronologic VCS simulator copyright 1991-2023
+Contains Synopsys proprietary information.
+Compiler version V-2023.12-SP2_Full64; Runtime version V-2023.12-SP2_Full64;  Nov 16 05:37 2026
+
+================================================================
+ tb_attn —— DUT=top_varB  cat=zero  n=4  clk=100 MHz
+ 判据：逐位一致 + RMSE<=0.060 + max|e|<=0.200
+ 向量：tb/vectors/s20260101_full   格式：qb10qf7
+================================================================
+----------------------------------------------------------------
+ 类别 zero        任务 4/4 通过
+ 时延 lat: min=1423 avg=1423 max=1423 周期（@100 MHz）；另装载 768 拍/任务
+ 最差 RMSE=0.000537  最差 max|e|=0.001488  最大逐位失配=0 个元素
+ 覆盖率：cat=zero lat_b=1 mism_b=0
+[SUMMARY] cat=zero tasks=4 pass=4 fail=0 lat_min=1423 lat_avg=1423 lat_max=1423 ld=768 rmse=0.000537 maxae=0.001488 mism=0 status=PASS
+ 结果：PASS
+================================================================
+$finish called from file "tb/sys/tb_attn.sv", line 456.
+$finish at simulation time             87985000
+           V C S   S i m u l a t i o n   R e p o r t 
+Time: 87985000 ps
+CPU Time:      0.240 seconds;       Data structure size:   0.0Mb
+Mon Nov 16 05:37:36 2026
