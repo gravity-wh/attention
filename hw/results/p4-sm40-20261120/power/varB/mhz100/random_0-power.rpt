@@ -1,0 +1,85 @@
+*----------------------------------------------------------------------------------------
+*	Innovus 25.12-s079_1 (64bit) 11/18/2025 12:56 (Linux 4.18.0-305.el8.x86_64)
+*
+*
+* 	Date & Time:	2026-Nov-20 19:04:44 (2026-Nov-20 11:04:44 GMT)
+*
+*----------------------------------------------------------------------------------------
+*
+*	Design: top_varB
+*
+*	Liberty Libraries used:
+*	        view_tt: $SMIC40_PDK/sc9mc_base_rvt_c40/r1p1/lib/sc9mc_logic0040ll_base_rvt_c40_tt_typical_max_1p10v_25c.lib
+*
+*	Power Domain used:
+*
+*       Power View : view_tt
+*
+*       User-Defined Activity : N.A.
+*
+*	Switching Activity File used:
+*	        gate-activity/varB/mhz100/random_0.vcd
+*                    Vcd Window used(Start Time, Stop Time):  (75.000000,21985.000000)
+*                     Vcd Scale Factor: 1
+* *                    Design annotation coverage: 25364/25634 = 98.9467%
+*
+*       Hierarchical Global Activity: N.A.
+*
+*       Global Activity: N.A.
+*
+*       Sequential Element Activity: N.A.
+*
+*       Primary Input Activity: 0.200000
+*
+*       Default icg ratio: N.A.
+*
+*       Global Comb ClockGate Ratio: N.A.
+*
+*	Power Units = 1mW
+*
+*	Time Units = 1e-09 secs
+*
+*       report_power -outfile p4-power/varB/mhz100/random_0-power.rpt -view view_tt
+*
+-----------------------------------------------------------------------------------------
+
+
+Total Power
+-----------------------------------------------------------------------------------------
+Total Internal Power:        5.30780826 	   94.7706%
+Total Switching Power:       0.28724345 	    5.1287%
+Total Leakage Power:         0.00564063 	    0.1007%
+Total Power:                 5.60069233
+-----------------------------------------------------------------------------------------
+
+
+Group                           Internal   Switching     Leakage       Total  Percentage
+                                Power      Power         Power         Power  (%)
+-----------------------------------------------------------------------------------------
+Sequential                          5.07    0.008997    0.003328       5.083       90.75
+Macro                                  0           0           0           0           0
+IO                                     0           0           0           0           0
+Combinational                     0.2373      0.2782    0.002313      0.5179       9.246
+Clock (Combinational)                  0           0           0           0           0
+Clock (Sequential)                     0           0           0           0           0
+-----------------------------------------------------------------------------------------
+Total                              5.308      0.2872    0.005641       5.601         100
+-----------------------------------------------------------------------------------------
+
+
+Rail                  Voltage   Internal   Switching     Leakage       Total  Percentage
+                                Power      Power         Power         Power  (%)
+-----------------------------------------------------------------------------------------
+Default                   1.1      5.308      0.2872    0.005641       5.601         100
+
+
+-----------------------------------------------------------------------------------------
+*	Power Distribution Summary:
+*                Highest Average Power:            u_quant/g11958 (OR2_X11M_A9TR40):         0.005154
+*                Highest Leakage Power:            u_quant/g11967 (OR2_X11M_A9TR40):        2.198e-06
+*          Total Cap:      6.3667e-11 F
+*          Total instances in design: 24190
+*          Total instances in design with no power:     0
+*          Total instances in design with no activity:     0
+*          Total Fillers and Decap:     0
+-----------------------------------------------------------------------------------------

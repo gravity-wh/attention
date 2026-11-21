@@ -1,0 +1,5 @@
+sample,gate_check,start_ns,stop_ns,duration_ns,outputs
+cancel_0,PASS,75.000,28625.000,28550.000,256
+extreme_0,PASS,75.000,35345.000,35270.000,256
+random_0,PASS,75.000,36305.000,36230.000,256
+zero_0,PASS,75.000,36305.000,36230.000,256

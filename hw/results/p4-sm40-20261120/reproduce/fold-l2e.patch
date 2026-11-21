@@ -1,0 +1,84 @@
+--- a/rtl/core/exp2_unit.sv
++++ b/rtl/core/exp2_unit.sv
+@@ -23,7 +23,7 @@
+ //  「与自身软件模型逐位一致」直接失效。所以近似只能放在模型允许的这三个点：
+ //  exp、倒数、以及 Q/K/V 的量化。其余一律精确。
+ // =====================================================================
+-module exp2_unit (
++module exp2_unit #(parameter bit INPUT_LOG2 = 1'b0) (
+   input  logic signed [31:0] d_fx,   // d = m - S >= 0，F = S_FRAC
+   output logic        [16:0] e_fx    // 2^(-d)，F = 16，范围 [0, 65536]
+ );
+@@ -52,6 +52,7 @@
+     // ---- 1. t = d * log2(e)，F=S_FRAC → F=16（RNE）----
+     mul_t = $signed({{32{d_fx[31]}}, d_fx}) * 64'sd94548;
+     if (d_fx < 0)  t = 64'sd0;                      // 防御：契约保证 d>=0
++    else if (INPUT_LOG2) t = 64'($signed(d_fx));
+     else           t = `ATTN_RNE_SHR(mul_t, 16);
+
+     n = int'(t >>> 16);
+--- a/rtl/varB/top_varB.sv
++++ b/rtl/varB/top_varB.sv
+@@ -121,9 +121,15 @@
+   logic signed [QB-1:0] q_quant;
+   fp16_quant u_quant (.x(ld_data), .q(q_quant));
+
++  // Fold log2(e) into stored K, at the original QF scale.
++  logic signed [63:0] scaled_key;
++  logic signed [QB-1:0] k_quant;
++  assign scaled_key = $signed(q_quant) * 64'sd94548;
++  assign k_quant = attn_sat(`ATTN_RNE_SHR(scaled_key, 16), QB);
++
+   logic signed [31:0] d_fx;
+   logic        [16:0] e_fx;
+-  exp2_unit u_exp (.d_fx(d_fx), .e_fx(e_fx));
++  exp2_unit #(.INPUT_LOG2(1'b1)) u_exp (.d_fx(d_fx), .e_fx(e_fx));
+
+   logic signed [63:0] y_fx;
+   logic        [15:0] y_fp;
+@@ -221,7 +227,7 @@
+     if (ld_en) begin
+       case (ld_sel)
+         2'd0: qm[ld_addr] <= q_quant;
+-        2'd1: km[ld_addr] <= q_quant;
++        2'd1: km[ld_addr] <= k_quant;
+         2'd2: vm[ld_addr] <= q_quant;
+         default: ;
+       endcase
+--- a/model/attn_model.c
++++ b/model/attn_model.c
+@@ -90,8 +90,8 @@
+  * 硬件：一个乘法（LOG2E_Q16）+ 一个桶形移位 + 一个 LUT + 一个插值乘法。 */
+ static int32_t exp2_neg(int32_t d_fx, const attn_cfg_t *c)
+ {
+-    /* t = d * log2(e)，从 F=S_FRAC 转到 F=16 */
+-    int64_t t = fx_rne_shift((int64_t)d_fx * LOG2E_Q16, S_FRAC);
++    /* K was scaled during load, so d is already a base-2 exponent. */
++    int64_t t = d_fx;
+
+     int64_t  n = t >> 16;                        /* 整数部分，>= 0 */
+     uint32_t f = (uint32_t)(t & 0xFFFF);         /* 小数部分，F=16 */
+@@ -126,7 +126,13 @@
+     for (i = 0; i < ATTN_MX; i++) {
+         for (j = 0; j < ATTN_MX; j++) {
+             qf[i][j] = quant_to_fx(in->q[i][j], c);
+-            kf[i][j] = quant_to_fx(in->k[i][j], c);
++            int64_t key = quant_to_fx(in->k[i][j], c);
++            key = fx_rne_shift(key * LOG2E_Q16, S_FRAC);
++            const int64_t hi = ((int64_t)1 << (c->qb - 1)) - 1;
++            const int64_t lo = -hi - 1;
++            if (key > hi) key = hi;
++            if (key < lo) key = lo;
++            kf[i][j] = (int32_t)key;
+             vf[i][j] = quant_to_fx(in->v[i][j], c);
+         }
+     }
+@@ -178,7 +184,7 @@
+             double ev[ATTN_MX];
+             for (j = 0; j < ATTN_MX; j++) {
+                 double d = (double)(m - S[i][j]) / ldexp(1.0, S_FRAC);
+-                double x = attn_exp_f64(-d) * 65536.0;
++                double x = attn_exp_f64(-d * 0.6931471805599453) * 65536.0;
+                 int64_t q = (int64_t)nearbyint(x);
+                 if (q > 65536) q = 65536;
+                 ev[j] = (double)q;

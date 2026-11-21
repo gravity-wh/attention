@@ -1,0 +1,91 @@
+diff --git a/flow/synth/parse_syn.py b/flow/synth/parse_syn.py
+index 1825260..201a455 100644
+--- a/flow/synth/parse_syn.py
++++ b/flow/synth/parse_syn.py
+@@ -171,6 +171,18 @@ def main():
+                        r"([0-9.eE+-]+)\s*\)?\s*(mW|uW|µW|nW|W)\b", pwr_rpt, re.I)
+         leak_mw = scale_power(float(ml.group(1)), ml.group(2)) if ml else None
+
++    # Genus 25 summarizes leakage, internal, switching and total in a Subtotal row.
++    if power_mw is None:
++        unit = re.search(r"^Power Unit:\s*(nW|uW|µW|mW|W)\s*$", pwr_rpt, re.M | re.I)
++        number = r"([0-9.eE+-]+)"
++        values = re.search(r"^[ \t]*Subtotal\s+" + r"\s+".join([number] * 4) + r"\s+100(?:\.0+)?%", pwr_rpt, re.M)
++        if unit and values:
++            leakage, internal, switching, total = map(float, values.groups())
++            leak_mw = scale_power(leakage, unit.group(1))
++            dyn_mw = scale_power(internal + switching, unit.group(1))
++            power_mw = scale_power(total, unit.group(1))
++            src["power"] = "power.rpt(Subtotal, %s)" % unit.group(1)
++
+     # ---------------- 规模 ----------------
+     # qor.rpt 的 Leaf Instance Count 才是叶子单元数；Tcl 的 llength
+     # [get_cells -hier *] 会把 33 个层级实例也算进去（75469 vs 75436）。
+diff --git a/tb/sys/tb_attn.sv b/tb/sys/tb_attn.sv
+index b0e637b..7ff921c 100644
+--- a/tb/sys/tb_attn.sv
++++ b/tb/sys/tb_attn.sv
+@@ -133,6 +133,7 @@ module tb_attn;
+   int cov_mis_b = 0;   // 0=无失配 1=有失配
+   int cov_rm_b  = 0;   // rmse*10000，桶化后观察分布
+
++  `ifndef VERILATOR
+   covergroup cg_task;
+     option.per_instance = 1;
+     cp_cat  : coverpoint cov_cat   { bins b[] = {[0:5]}; }
+@@ -144,6 +145,7 @@ module tb_attn;
+   endgroup
+
+   cg_task cg = new();
++  `endif
+
+   // ---------------------------------------------------------------- 主流程变量
+   // 必须声明在 task 之前：load_vec() 要用 cfgtag 拼黄金值文件名，
+@@ -296,7 +298,8 @@ module tb_attn;
+       y = fp16_to_real(outv[i]);
+       e = y - $bitstoreal(refv[i]);
+       se += e * e;
+-      if ($abs(e) > maxae) maxae = $abs(e);
++      if (e < 0.0) e = -e;
++      if (e > maxae) maxae = e;
+     end
+     rmse = $sqrt(se / NE);
+
+@@ -308,7 +311,9 @@ module tb_attn;
+     cov_lat_b = (lat < 300) ? 0 : (lat < 3000) ? 1 : 2;
+     cov_mis_b = (mismatch == 0) ? 0 : 1;
+     cov_rm_b  = int'(rmse * 10000.0);
++    `ifndef VERILATOR
+     cg.sample();
++    `endif
+   endtask
+
+   // ---------------------------------------------------------------- 主流程
+@@ -380,6 +385,7 @@ module tb_attn;
+       end
+
+       // ---- reset 用例：先存一轮，复位后重跑，两次必须逐位相同 ----
++      rdiff = 0;
+       if (cat_name == "reset") begin
+         for (int i = 0; i < NE; i++) outv_first[i] = outv[i];
+         do_reset(3);
+@@ -387,17 +393,17 @@ module tb_attn;
+         run_task(lat, ord, recv);
+         if (lat < 0) begin n_task_fail++; continue; end
+
+-        rdiff = 0;
+         for (int i = 0; i < NE; i++) if (outv[i] !== outv_first[i]) rdiff++;
+         if (rdiff != 0)
+           $display("  [RESET] 复位后输出与复位前不一致：%0d 个元素不同", rdiff);
+         else if (verbose)
+           $display("  [RESET] 复位前后逐位一致 ✓");
+-        mismatch += rdiff;
+       end
+
+       // ---- 判据 ----
+       check_task(passv, mismatch, rmse, maxae, nf);
++      mismatch += rdiff;
++      if (rdiff != 0) passv = 1'b0;
+       if (ord != 0) begin
+         $display("  [PROTO] o_addr 未严格递增，异常 %0d 次", ord);
+         passv = 1'b0;
