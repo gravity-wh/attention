@@ -47,9 +47,11 @@ Genus 25.12-s067_1 使用共同的综合约束。面积为映射后标准单元�
 
 同一 `random_0` 激励覆盖 80、100、120、150 MHz。两套网表的单任务能耗变化均小于 0.06%。布局前 120 MHz 的 setup WNS 为 +0.226 ns（ref）和 +0.139 ns（varB），150 MHz 分别为 −1.357 ns 和 −1.444 ns。[扫频图](../../../docs/report/slides/figures/p4-frequency-sweep.png) · [各频点报告](power)
 
-## 配对布局布线进度
+## 配对布局布线
 
-varB 已产出布线、RC、STA 和检查报告，连通性通过，SS setup WNS 为 −0.875 ns，FF hold WNS 为 −0.421 ns。NanoRoute 记录 115,649 个 DRC 标记。当前 ref 已完成 CTS，正从检查点续跑详细布线。[后端汇总](pnr/summary.csv) · [varB 后端报告](pnr/varB)
+ref 和 varB 均已生成布线、提取、STA 和检查报告。布线后单元面积从 175,253.249 降到 75,162.024 µm²，减少 57.1%。SS setup WNS 为 −0.699 → −0.875 ns，FF hold WNS 为 −0.431 → −0.421 ns。
+
+两次详细布线均触发 NRDR-30，NanoRoute 记录的 DRC 标记分别为 291,435 和 115,649。独立几何检查均达到 1,000 条报告上限。连通性检查通过，时序和几何仍有违例。[后端汇总](pnr/summary.csv) · [ref 报告](pnr/ref) · [varB 报告](pnr/varB)
 
 ## 复现命令
 

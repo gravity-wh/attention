@@ -826,26 +826,28 @@ varB 任务时长为 21.43 $\mu$s，其余三类为 21.91 $\mu$s。
 \end{frame}
 
 \begin{frame}[t]
-\frametitle{\textbf{布局布线阶段结果}}
+\frametitle{\textbf{配对布局布线与布线后时序}}
 \footnotesize
 \begin{center}
 \begin{tabular}{lrr}
   \toprule
   100 MHz，Innovus 25.12 & ref & varB \\
   \midrule
-  布线后单元面积（$\mu$m$^2$） & 待提取 & 75\,162.024 \\
-  芯片占地（$\mu$m$^2$） & 待提取 & 130\,767.437 \\
-  SS setup WNS（ns） & 待提取 & $-0.875$ \\
-  FF hold WNS（ns） & 待提取 & $-0.421$ \\
-  NanoRoute DRC 标记 & 待核对 & 115\,649 \\
-  连通性检查 & 待核对 & 通过 \\
+  布线后单元面积（$\mu$m$^2$） & 175\,253.249 & 75\,162.024 \\
+  芯片占地（$\mu$m$^2$） & 303\,103.886 & 130\,767.437 \\
+  SS setup WNS（ns） & $-0.699$ & $-0.875$ \\
+  SS setup 违例路径 & 8\,470 & 582 \\
+  FF hold WNS（ns） & $-0.431$ & $-0.421$ \\
+  FF hold 违例路径 & 28\,408 & 11\,353 \\
+  NanoRoute DRC 标记 & 291\,435 & 115\,649 \\
+  连通性检查 & 通过 & 通过 \\
   \bottomrule
 \end{tabular}
 \end{center}
-\begin{block}{后端进度}
-  两套 100 MHz TT 网表采用相同的 SMIC 40LL 工艺库和布线设置。
-  ref 已完成 CTS，正在从检查点续跑详细布线。
-  varB 仍有时序与几何违例。
+\begin{block}{时序与几何检查}
+  两套 TT 网表均以 100 MHz 布线。RC 提取后在 SS 查 setup，在 FF 查 hold。
+  varB 的布线后单元面积减少 57.1\%。两次详细布线均触发 NRDR-30，
+  时序和几何仍有违例。
 \end{block}
 \end{frame}
 
